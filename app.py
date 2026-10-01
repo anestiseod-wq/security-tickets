@@ -1,4 +1,4 @@
-import streamlit as st
+        import streamlit as st
 import pandas as pd
 import datetime
 import os
@@ -9,7 +9,7 @@ from email.mime.multipart import MIMEMultipart
 # -----------------------------------------------------------------------------
 # CONFIGURATION & SETUP
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="Security Ticketing System", layout="wide", page_icon="🛡️")
+st.set_page_config(page_title="Security Ticketing System", layout="wide", page_icon="🛡️️")
 
 DB_TICKETS = "tickets_db.csv"
 DB_COMMENTS = "comments_db.csv"
@@ -41,7 +41,6 @@ tickets_df, comments_df, materials_df = load_data()
 # HELPER: EMAIL NOTIFICATION
 # -----------------------------------------------------------------------------
 def send_email_alert(ticket_id, system, area, status, comment=""):
-    # Ρυθμίστε τα στοιχεία του δικού σας SMTP / Email Server αν θέλετε αποστολή
     try:
         sender_email = "notifications@security-system.local"
         receiver_email = "team@security-system.local"
@@ -64,8 +63,7 @@ def send_email_alert(ticket_id, system, area, status, comment=""):
         </html>
         """
         msg.attach(MIMEText(html, "html"))
-        # smtplib implementation here if required
-    except Exception as e:
+    except Exception:
         pass
 
 # -----------------------------------------------------------------------------
@@ -99,7 +97,7 @@ col4.metric("PARTS COST (€)", f"€ {total_cost:,.2f}")
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# SIDEBAR: ΝΕΟ TICKET (ΜΕ ΠΡΟΤΥΠΟ ΚΕΙΜΕΝΟ & ΠΡΟΑΙΡΕΤΙΚΕΣ ΦΩΤΟΓΡΑΦΙΕΣ)
+# SIDEBAR: ΝΕΟ TICKET
 # -----------------------------------------------------------------------------
 st.sidebar.header("➕ Καταχώρηση Νέας Βλάβης")
 
@@ -107,7 +105,6 @@ sys_cat = st.sidebar.selectbox("Σύστημα", ["CCTV", "Access Control", "Fir
 area_eq = st.sidebar.text_input("Περιοχή / Εξοπλισμός", placeholder="π.χ. Parking / CAM 5 Multi-Lens")
 priority = st.sidebar.selectbox("Προτεραιότητα", ["Critical", "High", "Medium", "Low"])
 
-# Πρότυπο Κείμενο (Template)
 template_text = f"""📌 [ΑΝΑΦΟΡΑ ΒΛΑΒΗΣ ΣΥΣΤΗΜΑΤΩΝ ΑΣΦΑΛΕΙΑΣ]
 -------------------------------------------
 • Σύστημα: {sys_cat}
@@ -116,8 +113,6 @@ template_text = f"""📌 [ΑΝΑΦΟΡΑ ΒΛΑΒΗΣ ΣΥΣΤΗΜΑΤΩΝ ΑΣ�
 • Αρχικές Ενέργειες: Έγινε αρχικός έλεγχος τροφοδοσίας / επανεκκίνηση."""
 
 description = st.sidebar.text_area("Περιγραφή Βλάβης", value=template_text, height=180)
-
-# Προαιρετική Φωτογραφία
 uploaded_file = st.sidebar.file_uploader("📷 Φωτογραφία Βλάβης (Προαιρετικό)", type=["jpg", "png", "jpeg"])
 
 if st.sidebar.button("🚀 Υποβολή Ticket"):
@@ -125,7 +120,6 @@ if st.sidebar.button("🚀 Υποβολή Ticket"):
         new_id = f"INC-{len(tickets_df) + 1:03d}"
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Save photo if exists
         photo_path = ""
         if uploaded_file is not None:
             os.makedirs("uploads", exist_ok=True)
@@ -145,7 +139,7 @@ if st.sidebar.button("🚀 Υποβολή Ticket"):
             "Assigned_To": "Unassigned"
         }])
         
-        tickets_df = pd.concat([tickets_df, new_ticket], ignore_index=False)
+        tickets_df = pd.concat([tickets_df, new_ticket], ignore_index=True)
         tickets_df.to_csv(DB_TICKETS, index=False)
         
         st.sidebar.success(f"Το Ticket {new_id} δημιουργήθηκε με επιτυχία!")
@@ -162,20 +156,18 @@ if not tickets_df.empty:
     for idx, row in tickets_df.iloc[::-1].iterrows():
         t_id = row["Ticket_ID"]
         status = row["Status"]
-        priority = row["Priority"]
+        priority_val = row["Priority"]
         
-        # Status Color Indicator
-        status_color = "🔴" if status in ["New", "OPEN"] else ("🟡" if status == "Pending Parts" else "🟢")
+        status_color = "🔴" if status in ["New", "In Progress"] else ("🟡" if status == "Pending Parts" else "🟢")
         
-        with st.expander(f"{status_color} **{t_id}** | {row['System']} | {row['Area_Equipment']} | Priority: **{priority}** | Status: **{status}**"):
+        with st.expander(f"{status_color} **{t_id}** | {row['System']} | {row['Area_Equipment']} | Priority: **{priority_val}** | Status: **{status}**"):
             col_left, col_right = st.columns([2, 1])
             
             with col_left:
-                st.markdown(**Περιγραφή:**)
+                st.markdown("**Περιγραφή:**")
                 st.text(row["Description"])
                 st.caption(f"🕒 Ημερομηνία Αναφοράς: {row['Date_Reported']}")
                 
-                # Show Uploaded Image if available
                 img_dir = "uploads"
                 if os.path.exists(img_dir):
                     for img_file in os.listdir(img_dir):
@@ -184,8 +176,15 @@ if not tickets_df.empty:
 
             with col_right:
                 st.markdown("**🔄 Επεξεργασία & Αλλαγή Κατάστασης**")
-                new_status = st.selectbox("Status", ["New", "In Progress", "Pending Parts", "Closed"], index=["New", "In Progress", "Pending Parts", "Closed"].index(status), key=f"stat_{t_id}")
-                new_priority = st.selectbox("Priority", ["Critical", "High", "Medium", "Low"], index=["Critical", "High", "Medium", "Low"].index(priority), key=f"prio_{t_id}")
+                
+                stat_options = ["New", "In Progress", "Pending Parts", "Closed"]
+                stat_index = stat_options.index(status) if status in stat_options else 0
+                new_status = st.selectbox("Status", stat_options, index=stat_index, key=f"stat_{t_id}")
+                
+                prio_options = ["Critical", "High", "Medium", "Low"]
+                prio_index = prio_options.index(priority_val) if priority_val in prio_options else 0
+                new_priority = st.selectbox("Priority", prio_options, index=prio_index, key=f"prio_{t_id}")
+                
                 assigned = st.text_input("Υπεύθυνος (Assigned To)", value=str(row["Assigned_To"]), key=f"ass_{t_id}")
                 
                 if st.button("💾 Ενημέρωση Ticket", key=f"save_{t_id}"):
@@ -193,7 +192,7 @@ if not tickets_df.empty:
                     tickets_df.loc[tickets_df["Ticket_ID"] == t_id, "Priority"] = new_priority
                     tickets_df.loc[tickets_df["Ticket_ID"] == t_id, "Assigned_To"] = assigned
                     
-                    if new_status == "Closed" and not row["Date_Resolved"]:
+                    if new_status == "Closed" and not str(row["Date_Resolved"]):
                         tickets_df.loc[tickets_df["Ticket_ID"] == t_id, "Date_Resolved"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     
                     tickets_df.to_csv(DB_TICKETS, index=False)
@@ -210,7 +209,6 @@ if not tickets_df.empty:
             for _, c_row in t_comments.iterrows():
                 st.info(f"**[{c_row['Timestamp']}] {c_row['Author']} ({c_row['Department']}):**\n{c_row['Comment']}")
 
-            # Form to Add Comment
             c_col1, c_col2, c_col3 = st.columns([1, 1, 2])
             dept = c_col1.selectbox("Τμήμα", ["Security", "IT", "Technical Dept"], key=f"dept_{t_id}")
             author = c_col2.text_input("Όνομα", value="Security Admin", key=f"auth_{t_id}")
@@ -232,7 +230,7 @@ if not tickets_df.empty:
                     st.rerun()
 
             # -----------------------------------------------------------------
-            # MATERIALS & COSTS SUB-SECTION
+            # MATERIALS & COSTS
             # -----------------------------------------------------------------
             st.markdown("📦 **Υλικά & Κόστος Ανταλλακτικών**")
             t_mats = materials_df[materials_df["Ticket_ID"] == t_id]
@@ -261,3 +259,5 @@ if not tickets_df.empty:
 
 else:
     st.info("Δεν υπάρχουν καταχωρημένες βλάβες.")
+
+
