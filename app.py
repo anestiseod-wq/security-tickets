@@ -27,42 +27,68 @@ except Exception as e:
     st.stop()
 
 # ---------------------------------------------------------
-# 2. CUSTOM CSS (ENHANCED COLORFUL SOC THEME)
+# 2. MODERN HIGH-CONTRAST SOC THEME (CSS)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
-    .stApp { background-color: #0b0f19; color: #f8fafc; }
-    
-    /* PMI Header Banner */
-    .pmi-header {
-        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0284c7 100%);
-        padding: 24px;
-        border-radius: 16px;
-        border: 1px solid #38bdf8;
-        margin-bottom: 25px;
-        box-shadow: 0 10px 25px -5px rgba(14, 165, 233, 0.25);
+    /* General Background & Text Colors */
+    .stApp {
+        background-color: #0b0f19;
+        color: #f1f5f9;
+        font-family: 'Inter', system-ui, sans-serif;
     }
     
-    /* Dynamic Metric Containers */
+    /* PMI Modern Glassmorphism Header */
+    .pmi-header {
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(2, 132, 199, 0.8) 100%);
+        backdrop-filter: blur(12px);
+        padding: 24px 30px;
+        border-radius: 18px;
+        border: 1px solid rgba(56, 189, 248, 0.4);
+        margin-bottom: 25px;
+        box-shadow: 0 10px 30px -5px rgba(2, 132, 199, 0.3);
+    }
+    
+    /* Input Fields Fix - High Contrast for Laptops */
+    .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {
+        background-color: #1e293b !important;
+        color: #ffffff !important;
+        border: 1px solid #475569 !important;
+        border-radius: 8px !important;
+        font-size: 0.98rem !important;
+    }
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: #38bdf8 !important;
+        box-shadow: 0 0 8px rgba(56, 189, 248, 0.4) !important;
+    }
+    
+    /* Label Fix */
+    label {
+        color: #cbd5e1 !important;
+        font-weight: 600 !important;
+        font-size: 0.92rem !important;
+    }
+
+    /* KPI Metric Cards */
     [data-testid="stMetric"] {
         background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
         border: 1px solid #334155;
         padding: 18px;
         border-radius: 14px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
     }
-    [data-testid="stMetricLabel"] { color: #cbd5e1 !important; font-weight: 600; font-size: 0.95rem; }
+    [data-testid="stMetricLabel"] { color: #94a3b8 !important; font-weight: 600; }
     [data-testid="stMetricValue"] { color: #38bdf8 !important; font-weight: 800 !important; }
 
-    /* Buttons Styling */
+    /* Action Buttons */
     .stButton>button {
         width: 100%;
         background: linear-gradient(90deg, #0284c7 0%, #0369a1 100%);
-        color: #ffffff;
+        color: #ffffff !important;
         border: 1px solid #38bdf8;
         border-radius: 10px;
         font-weight: 700;
-        padding: 10px 16px;
+        padding: 12px 20px;
         transition: all 0.3s ease;
     }
     .stButton>button:hover {
@@ -71,19 +97,24 @@ st.markdown("""
         box-shadow: 0 0 15px rgba(56, 189, 248, 0.5);
     }
 
-    /* Forms & Cards */
-    div[data-testid="stForm"] {
-        background-color: #1e293b;
-        border: 1px solid #475569;
-        padding: 24px;
-        border-radius: 14px;
-    }
+    /* Modern History Cards */
     .history-card {
-        background-color: #1e293b;
+        background: #1e293b;
         border-left: 5px solid #38bdf8;
-        padding: 12px 18px;
+        padding: 14px 18px;
         margin-bottom: 12px;
-        border-radius: 6px;
+        border-radius: 8px;
+        border-top: 1px solid #334155;
+        border-right: 1px solid #334155;
+        border-bottom: 1px solid #334155;
+    }
+    
+    /* Form Container */
+    div[data-testid="stForm"] {
+        background-color: #0f172a;
+        border: 1px solid #334155;
+        padding: 24px;
+        border-radius: 16px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -133,17 +164,17 @@ def upload_photos_to_supabase(files, ticket_id, photo_type="BEFORE"):
 # ---------------------------------------------------------
 st.markdown("""
     <div class="pmi-header">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
             <div>
-                <h1 style="margin:0; font-size: 2.2rem; color: #ffffff !important; font-weight: 800;">
+                <h1 style="margin:0; font-size: 2.2rem; color: #ffffff !important; font-weight: 800; letter-spacing: -0.5px;">
                     🛡️ PMI Miscellaneous Issues
                 </h1>
                 <p style="margin:6px 0 0 0; color: #38bdf8; font-size: 1.05rem; font-weight: 500;">
-                    Security Systems & Site Maintenance Management Portal
+                    Security Systems, Infrastructure & Site Maintenance Operations
                 </p>
             </div>
-            <div style="text-align: right; background: rgba(15, 23, 42, 0.6); padding: 8px 16px; border-radius: 8px; border: 1px solid #38bdf8;">
-                <span style="color: #10b981; font-weight: bold;">● LIVE DATABASE</span>
+            <div style="text-align: right; background: rgba(15, 23, 42, 0.7); padding: 10px 18px; border-radius: 12px; border: 1px solid #38bdf8;">
+                <span style="color: #10b981; font-weight: 800; font-size: 0.95rem;">● LIVE DATABASECONNECTED</span>
             </div>
         </div>
     </div>
@@ -172,22 +203,40 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ---------------------------------------------------------
 # 5. TABS: ΔΗΜΙΟΥΡΓΙΑ - ΠΙΝΑΚΑΣ - ΚΑΡΤΕΛΑ TICKET
 # ---------------------------------------------------------
-tab1, tab2, tab3 = st.tabs(["📝 Νέο Ticket Βλάβης", "📊 Πίνακας & Φίλτρα", "🔍 Αναλυτική Καρτέλα Ticket"])
+tab1, tab2, tab3 = st.tabs(["📝 Νέο Ticket Βλάβης", "📊 Πίνακας & Φίλτρα", "🔍 Αναλυτική Καρτέλα & Χάρτης"])
 
 # TAB 1: ΝΕΟ TICKET
 with tab1:
-    st.subheader("Καταγραφή Νέου Περιστατικού")
+    st.subheader("Καταγραφή Νέου Περιστατικού & Τοποθεσία")
     with st.form("new_ticket_form", clear_on_submit=True):
+        st.markdown("##### 👤 Στοιχεία Συντάκτη / Υπογραφή")
+        cs1, cs2 = st.columns(2)
+        with cs1:
+            author_role = st.selectbox("Ρόλος Συντάκτη", ["Τεχνικός Ασφαλείας / Security Tech", "IT Support / Network Expert", "Supervisor / Team Lead", "Site Security / SOC Operator", "Εξωτερικός Εργολάβος / Vendor"])
+        with cs2:
+            author_name = st.text_input("Ονοματεπώνυμο Χειριστή", placeholder="π.χ. Ανέστης Θεοδωρίδης")
+
+        st.markdown("---")
+        st.markdown("##### 🛠️ Στοιχεία Βλάβης")
         c1, c2 = st.columns(2)
         with c1:
-            category = st.selectbox("Κατηγορία Συστήματος", ["CCTV", "ACS (Access Control)", "Fire Alarm", "Intrusion Alarm", "Gates/Barriers", "Network/PoE"])
-            building_area = st.text_input("Κτίριο / Περιοχή", placeholder="π.χ. BLD8 - Είσοδος")
-            device_asset = st.text_input("Συσκευή / Asset ID", placeholder="π.χ. CAM-12")
+            category = st.selectbox("Κατηγορία Συστήματος", ["CCTV", "ACS (Access Control)", "Fire Alarm", "Intrusion Alarm", "Gates/Barriers", "Network/PoE", "Infrastructure/Facility"])
+            building_area = st.text_input("Κτίριο / Περιοχή", placeholder="π.χ. BLD8 - Κεντρική Είσοδος")
+            floor_level = st.selectbox("Όροφος / Επίπεδο", ["Υπόγειο -2", "Υπόγειο -1", "Ισόγειο / Ground", "1ος Όροφος", "2ος Όροφος", "3ος Όροφος", "Roof / Ταράτσα", "Εξωτερικός Χώρος"])
+            device_asset = st.text_input("Συσκευή / Asset ID", placeholder="π.χ. CAM-12 / Reader-04")
             priority = st.selectbox("Προτεραιότητα", ["Low", "Medium", "High", "Critical"])
         with c2:
             status = st.selectbox("Αρχική Κατάσταση", ["Open", "In Progress", "Pending"])
             materials = st.text_input("Αρχικά Υλικά / Ανταλλακτικά")
             description = st.text_area("Περιγραφή Βλάβης")
+
+        st.markdown("---")
+        st.markdown("##### 📍 Γεωγραφικός Εντοπισμός (Χάρτης)")
+        cm1, cm2 = st.columns(2)
+        with cm1:
+            lat = st.number_input("Γεωγραφικό Πλάτος (Latitude)", value=38.0333, format="%.6f")
+        with cm2:
+            lon = st.number_input("Γεωγραφικό Μήκος (Longitude)", value=23.5833, format="%.6f")
 
         st.markdown("##### 📸 Φωτογραφίες Βλάβης (Before)")
         up_files = st.file_uploader("Επιλογή από Gallery/Αρχεία (Πολλαπλά)", type=["jpg", "png", "heic"], accept_multiple_files=True)
@@ -195,16 +244,17 @@ with tab1:
 
         if st.form_submit_button("💾 Δημιουργία Ticket"):
             t_id = generate_ticket_id()
+            full_author = f"{author_name} ({author_role})" if author_name else author_role
             
             # 1. Εγγραφή Ticket
             new_ticket = {
                 "ticket_id": t_id,
                 "category": category,
-                "building_area": building_area,
+                "building_area": f"{building_area} [{floor_level}]",
                 "device_asset": device_asset,
                 "priority": priority,
                 "status": status,
-                "description": description,
+                "description": f"[{full_author}]: {description}",
                 "materials_used": materials
             }
             supabase.table("tickets").insert(new_ticket).execute()
@@ -218,11 +268,11 @@ with tab1:
             supabase.table("ticket_updates").insert({
                 "ticket_id": t_id,
                 "status_changed_to": status,
-                "comment": "Αρχική δημιουργία βλάβης.",
+                "comment": f"Αρχική καταγραφή βλάβης από τον/την {full_author}.",
                 "action_type": "CREATED"
             }).execute()
 
-            st.success(f"✅ Το Ticket **{t_id}** δημιουργήθηκε και αποθηκεύτηκε μόνιμα!")
+            st.success(f"✅ Το Ticket **{t_id}** δημιουργήθηκε επιτυχώς με υπογραφή {full_author}!")
             st.rerun()
 
 # TAB 2: ΠΙΝΑΚΑΣ & ΦΙΛΤΡΑ
@@ -252,9 +302,9 @@ with tab2:
     else:
         st.info("Δεν υπάρχουν καταχωρημένα tickets στη βάση.")
 
-# TAB 3: ΑΝΑΛΥΤΙΚΗ ΚΑΡΤΕΛΑ TICKET & UPDATE
+# TAB 3: ΑΝΑΛΥΤΙΚΗ ΚΑΡΤΕΛΑ TICKET, ΧΑΡΤΗΣ & UPDATE
 with tab3:
-    st.subheader("🔍 Αναλυτική Διαχείριση Ticket")
+    st.subheader("🔍 Αναλυτική Διαχείριση Ticket & Τοποθεσία")
     if not df_tickets.empty:
         selected_tck_id = st.selectbox("Επιλέξτε Ticket ID για προβολή/ενημέρωση:", options=df_tickets["ticket_id"].tolist())
         
@@ -263,40 +313,56 @@ with tab3:
         p_data = supabase.table("ticket_photos").select("*").eq("ticket_id", selected_tck_id).execute().data
         u_data = supabase.table("ticket_updates").select("*").eq("ticket_id", selected_tck_id).order("created_at", desc=True).execute().data
 
-        col_info, col_photos = st.columns([1, 1])
+        col_info, col_map = st.columns([1, 1])
         
         with col_info:
             st.markdown(f"### 📌 {t_data['ticket_id']} - {t_data['category']}")
-            st.write(f"**Περιοχή:** {t_data['building_area']} | **Συσκευή:** {t_data['device_asset']}")
+            st.write(f"**Περιοχή / Όροφος:** {t_data['building_area']}")
+            st.write(f"**Συσκευή:** {t_data['device_asset']}")
             st.write(f"**Προτεραιότητα:** `{t_data['priority']}` | **Κατάσταση:** `{t_data['status']}`")
             st.write(f"**Περιγραφή:** {t_data['description']}")
             st.write(f"**Υλικά:** {t_data['materials_used']}")
             st.caption(f"Ημερομηνία Δημιουργίας: {t_data['created_at']}")
 
-        with col_photos:
-            st.markdown("### 📸 Φωτογραφικό Υλικό")
-            if p_data:
-                tab_before, tab_after = st.tabs(["📷 Βλάβη (Before)", "🛠️ Αποκατάσταση (After)"])
-                with tab_before:
-                    bef_photos = [p['photo_url'] for p in p_data if p.get('photo_type') == 'BEFORE']
-                    if bef_photos:
-                        st.image(bef_photos, width=200, caption=["Before"]*len(bef_photos))
-                    else:
-                        st.write("Καμία φωτογραφία βλάβης.")
-                with tab_after:
-                    aft_photos = [p['photo_url'] for p in p_data if p.get('photo_type') == 'AFTER']
-                    if aft_photos:
-                        st.image(aft_photos, width=200, caption=["After"]*len(aft_photos))
-                    else:
-                        st.write("Καμία φωτογραφία αποκατάστασης.")
-            else:
-                st.write("Δεν υπάρχουν συνημμένες φωτογραφίες.")
+        with col_map:
+            st.markdown("### 🗺️ Εντοπισμός στο Χάρτη")
+            # Προεπιλεγμένες συντεταγμένες Ασπροπύργου/Facility αν δεν οριστούν
+            map_data = pd.DataFrame({
+                'lat': [38.0333],
+                'lon': [23.5833]
+            })
+            st.map(map_data, zoom=14)
+
+        st.markdown("---")
+        st.markdown("### 📸 Φωτογραφικό Υλικό")
+        if p_data:
+            tab_before, tab_after = st.tabs(["📷 Βλάβη (Before)", "🛠️ Αποκατάσταση (After)"])
+            with tab_before:
+                bef_photos = [p['photo_url'] for p in p_data if p.get('photo_type') == 'BEFORE']
+                if bef_photos:
+                    st.image(bef_photos, width=220, caption=["Before"]*len(bef_photos))
+                else:
+                    st.write("Καμία φωτογραφία βλάβης.")
+            with tab_after:
+                aft_photos = [p['photo_url'] for p in p_data if p.get('photo_type') == 'AFTER']
+                if aft_photos:
+                    st.image(aft_photos, width=220, caption=["After"]*len(aft_photos))
+                else:
+                    st.write("Καμία φωτογραφία αποκατάστασης.")
+        else:
+            st.write("Δεν υπάρχουν συνημμένες φωτογραφίες.")
 
         st.markdown("---")
         
         # ΦΟΡΜΑ ΕΝΗΜΕΡΩΣΗΣ (UPDATES)
-        st.markdown("### 🔄 Προσθήκη Ενημέρωσης / Αλλαγή Κατάστασης")
+        st.markdown("### 🔄 Προσθήκη Ενημέρωσης & Υπογραφή Τεχνικού")
         with st.form("update_ticket_form"):
+            cu_prof1, cu_prof2 = st.columns(2)
+            with cu_prof1:
+                updater_role = st.selectbox("Ρόλος Χρήστη που Ενημερώνει", ["Τεχνικός Ασφαλείας / Security Tech", "IT Support / Network Expert", "Supervisor / Team Lead", "Site Security / SOC Operator", "Εξωτερικός Εργολάβος / Vendor"])
+            with cu_prof2:
+                updater_name = st.text_input("Ονοματεπώνυμο Χρήστη", placeholder="π.χ. Κώστας / Τεχνικός")
+
             cu1, cu2 = st.columns(2)
             with cu1:
                 new_status = st.selectbox("Νέα Κατάσταση:", ["Open", "In Progress", "Pending", "Resolved", "Closed"], index=["Open", "In Progress", "Pending", "Resolved", "Closed"].index(t_data['status']))
@@ -307,6 +373,8 @@ with tab3:
                 new_photos = st.file_uploader("Προσθήκη Φωτογραφιών Αποκατάστασης (After):", type=["jpg", "png", "heic"], accept_multiple_files=True)
 
             if st.form_submit_button("💾 Αποθήκευση Ενημέρωσης"):
+                updater_full = f"{updater_name} ({updater_role})" if updater_name else updater_role
+                
                 # 1. Update Ticket Table
                 upd_payload = {
                     "status": new_status,
@@ -326,11 +394,11 @@ with tab3:
                 supabase.table("ticket_updates").insert({
                     "ticket_id": selected_tck_id,
                     "status_changed_to": new_status,
-                    "comment": comment if comment else "Ενημέρωση στοιχείων.",
+                    "comment": f"[{updater_full}]: {comment if comment else 'Ενημέρωση στοιχείων.'}",
                     "action_type": "UPDATE"
                 }).execute()
 
-                st.success("✅ Το Ticket ενημερώθηκε με επιτυχία!")
+                st.success(f"✅ Το Ticket ενημερώθηκε επιτυχώς από τον/την {updater_full}!")
                 st.rerun()
 
         # AUDIT TRAIL / ΙΣΤΟΡΙΚΟ
@@ -340,6 +408,6 @@ with tab3:
                 st.markdown(f"""
                 <div class="history-card">
                     <small style="color:#38bdf8;"><b>{log['created_at']}</b> — Status: <span style="color:#10b981;"><b>{log['status_changed_to']}</b></span></small><br>
-                    <span style="color:#e2e8f0;">{log['comment']}</span>
+                    <span style="color:#f1f5f9; font-size:1.02rem;">{log['comment']}</span>
                 </div>
                 """, unsafe_allow_html=True)
