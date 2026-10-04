@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import folium
-from streamlit_folium import st_folium
 from supabase import create_client, Client
 
 # ---------------------------------------------------------
@@ -71,7 +69,7 @@ st.markdown("""
         border: 1px solid #38bdf8;
         border-radius: 10px;
         font-weight: 700;
-        padding: 12px 20px;
+        padding: 10px 16px;
         transition: all 0.3s ease;
     }
     .stButton>button:hover {
@@ -79,6 +77,16 @@ st.markdown("""
         border-color: #7dd3fc;
         box-shadow: 0 0 15px rgba(56, 189, 248, 0.5);
     }
+
+    .ticket-card {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+        transition: transform 0.2s ease;
+    }
+    .ticket-card:hover { border-color: #38bdf8; }
 
     .history-card {
         background: #1e293b;
@@ -131,12 +139,16 @@ except Exception:
     df_tickets = pd.DataFrame()
 
 # Ασφαλής εξασφάλιση στηλών για αποφυγή KeyError
-for col in ["materials_used", "material_cost", "resolution_time_hrs"]:
+for col in ["materials_used", "resolution_time_hrs", "closed_at"]:
     if not df_tickets.empty and col not in df_tickets.columns:
-        df_tickets[col] = 0.0 if "cost" in col or "hrs" in col else "Ν/Α"
+        df_tickets[col] = 0.0 if col == "resolution_time_hrs" else "N/A"
+
+# Session State για επιλογή Ticket
+if "active_ticket_id" not in st.session_state:
+    st.session_state["active_ticket_id"] = None
 
 # ---------------------------------------------------------
-# 4. PMI HEADER & KPI METRICS
+# 4. PMI HEADER & MAIN KPI METRICS
 # ---------------------------------------------------------
 st.markdown("""
     <div class="pmi-header">
@@ -146,67 +158,47 @@ st.markdown("""
                     🛡️ PMI Miscellaneous Issues
                 </h1>
                 <p style="margin:4px 0 0 0; color: #38bdf8; font-size: 1.02rem; font-weight: 500;">
-                    Papastratos Facility (Ήμερος Τόπος / Θέση Κοκορέμι, Ασπρόπυργος)
+                    Security Systems & Site Maintenance Operations (Aspropyrgos Facility)
                 </p>
             </div>
             <div style="text-align: right; background: rgba(15, 23, 42, 0.7); padding: 8px 16px; border-radius: 12px; border: 1px solid #38bdf8;">
-                <span style="color: #10b981; font-weight: 800; font-size: 0.9rem;">● LIVE SUPABASE DB</span>
+                <span style="color: #10b981; font-weight: 800; font-size: 0.9rem;">● LIVE SUPABASE DATABASE</span>
             </div>
         </div>
     </div>
 """, unsafe_allow_html=True)
 
+# Υπολογισμοί KPIs
 total_tck = len(df_tickets)
 open_tck = len(df_tickets[df_tickets["status"].isin(["Open", "In Progress", "Pending"])]) if not df_tickets.empty else 0
-critical_tck = len(df_tickets[(df_tickets["priority"] == "Critical") & (df_tickets["status"] != "Closed")]) if not df_tickets.empty else 0
-total_material_cost = df_tickets["material_cost"].sum() if not df_tickets.empty and "material_cost" in df_tickets.columns else 0.0
+closed_df = df_tickets[df_tickets["status"] == "Closed"] if not df_tickets.empty else pd.DataFrame()
+closed_count = len(closed_df)
+
+# MTTR & Συνολικές Ώρες
+if not closed_df.empty and "resolution_time_hrs" in closed_df.columns:
+    closed_df["resolution_time_hrs"] = pd.to_numeric(closed_df["resolution_time_hrs"], errors='coerce').fillna(0)
+    total_hours = closed_df["resolution_time_hrs"].sum()
+    mttr = closed_df["resolution_time_hrs"].mean()
+else:
+    total_hours = 0.0
+    mttr = 0.0
 
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Συνολικά Tickets", total_tck)
 col2.metric("Ανοιχτά / Σε εξέλιξη", open_tck)
-col3.metric("Critical Εκκρεμή", critical_tck, delta="⚠️ Απαιτείται Ενέργεια" if critical_tck > 0 else "✅ Ομαλό", delta_color="inverse")
-col4.metric("Συνολικό Κόστος Υλικών", f"{total_material_cost:,.2f} €")
+col3.metric("Ολοκληρωμένα (Closed)", closed_count)
+col4.metric("Μ.Ο. Επισκευής (MTTR)", f"{mttr:.1f} hrs", delta=f"Σύνολο: {total_hours:.1f} hrs")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # 5. TABS
 # ---------------------------------------------------------
-tab1, tab2, tab3 = st.tabs(["📝 Νέο Ticket & Χάρτης", "📊 Πίνακας & Φίλτρα", "🔍 Αναλυτική Καρτέλα & Κόστη"])
+tab1, tab2, tab3 = st.tabs(["📝 Νέο Ticket Βλάβης", "📊 Ανοιχτές Βλάβες & Πίνακας", "🔍 Αναλυτική Καρτέλα & Ιστορικό"])
 
 # TAB 1: ΝΕΟ TICKET
 with tab1:
-    st.subheader("Καταγραφή Νέου Περιστατικού & Δορυφορικός Χάρτης")
-    
-    # Google Satellite Map (Papastratos Aspropyrgos Site: Ήμερος Τόπος)
-    pmi_lat, pmi_lon = 38.0562, 23.5938
-    
-    m = folium.Map(location=[pmi_lat, pmi_lon], zoom_start=18, max_zoom=21)
-    
-    # Προσθήκη Google Satellite / Hybrid Layer
-    google_satellite = folium.TileLayer(
-        tiles='https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
-        attr='Google Maps Satellite',
-        name='Google Satellite',
-        overlay=False,
-        control=True
-    ).add_to(m)
-    
-    folium.Marker(
-        [pmi_lat, pmi_lon], 
-        popup="Παπαστράτος - Ήμερος Τόπος / Θέση Κοκορέμι", 
-        tooltip="Κάντε κλικ στο ακριβές σημείο της βλάβης",
-        icon=folium.Icon(color="red", icon="info-sign")
-    ).add_to(m)
-    
-    # Μικρότερο ύψος χάρτη (240px)
-    map_data = st_folium(m, height=240, width="100%")
-    
-    selected_lat = map_data["last_clicked"]["lat"] if map_data and map_data.get("last_clicked") else pmi_lat
-    selected_lon = map_data["last_clicked"]["lng"] if map_data and map_data.get("last_clicked") else pmi_lon
-    
-    st.caption(f"📌 Σημείο στο Χάρτη: Lat: `{selected_lat:.6f}`, Lon: `{selected_lon:.6f}`")
-
+    st.subheader("Καταγραφή Νέου Περιστατικού")
     with st.form("new_ticket_form", clear_on_submit=True):
         st.markdown("##### 👤 Στοιχεία Συντάκτη / Υπογραφή")
         cs1, cs2 = st.columns(2)
@@ -216,7 +208,7 @@ with tab1:
             author_name = st.text_input("Ονοματεπώνυμο Χειριστή", placeholder="π.χ. Ανέστης Θεοδωρίδης")
 
         st.markdown("---")
-        st.markdown("##### 🛠️️ Στοιχεία Βλάβης & Τοποθεσία")
+        st.markdown("##### 🛠️ Στοιχεία Βλάβης & Περιοχή")
         c1, c2 = st.columns(2)
         with c1:
             category = st.selectbox("Κατηγορία Συστήματος", ["CCTV", "ACS (Access Control)", "Fire Alarm", "Intrusion Alarm", "Gates/Barriers", "Network/PoE", "Infrastructure/Facility"])
@@ -226,19 +218,8 @@ with tab1:
             priority = st.selectbox("Προτεραιότητα", ["Low", "Medium", "High", "Critical"])
         with c2:
             status = st.selectbox("Αρχική Κατάσταση", ["Open", "In Progress", "Pending"])
+            materials = st.text_input("Αρχικά Υλικά / Ανταλλακτικά")
             description = st.text_area("Περιγραφή Βλάβης")
-
-        st.markdown("---")
-        st.markdown("##### 📦 Υλικά, Κόστος & Πόροι")
-        cp1, cp2, cp3 = st.columns(3)
-        with cp1:
-            materials_source = st.selectbox("Προέλευση Υλικού", ["Αποθήκη Site (In Stock)", "Απαιτείται Αγορά (Purchase Order)", "Εγγύηση / Vendor Warranty", "Δεν απαιτήθηκαν υλικά"])
-            materials = st.text_input("Περιγραφή Υλικών / Ανταλλακτικών")
-        with cp2:
-            material_cost = st.number_input("Εκτιμώμενο / Πραγματικό Κόστος Υλικών (€)", min_value=0.0, step=10.0)
-            tech_count = st.number_input("Αριθμός Τεχνικών που απαιτήθηκαν", min_value=1, value=1)
-        with cp3:
-            est_hours = st.number_input("Εκτιμώμενες Ώρες Εργασίας", min_value=0.5, step=0.5, value=1.0)
 
         st.markdown("##### 📸 Φωτογραφίες Βλάβης (Before)")
         up_files = st.file_uploader("Επιλογή από Gallery/Αρχεία (Πολλαπλά)", type=["jpg", "png", "heic"], accept_multiple_files=True)
@@ -256,8 +237,8 @@ with tab1:
                 "priority": priority,
                 "status": status,
                 "description": f"[{full_author}]: {description}",
-                "materials_used": f"[{materials_source}] {materials}",
-                "resolution_time_hrs": est_hours
+                "materials_used": materials,
+                "resolution_time_hrs": 0.0
             }
             supabase.table("tickets").insert(new_ticket).execute()
 
@@ -268,44 +249,69 @@ with tab1:
             supabase.table("ticket_updates").insert({
                 "ticket_id": t_id,
                 "status_changed_to": status,
-                "comment": f"Αρχική καταγραφή βλάβης από {full_author}. Σημείο στο χάρτη: ({selected_lat:.4f}, {selected_lon:.4f}). Προέλευση υλικών: {materials_source}. Κόστος υλικών: {material_cost:.2f}€.",
+                "comment": f"Αρχική καταγραφή βλάβης από {full_author}.",
                 "action_type": "CREATED"
             }).execute()
 
             st.success(f"✅ Το Ticket **{t_id}** δημιουργήθηκε επιτυχώς με υπογραφή {full_author}!")
             st.rerun()
 
-# TAB 2: ΠΙΝΑΚΑΣ & ΦΙΛΤΡΑ
+# TAB 2: ΠΙΝΑΚΑΣ & ΔΙΑΔΡΑΣΤΙΚΕΣ ΚΑΡΤΕΣ
 with tab2:
-    st.subheader("Αναζήτηση & Ιστορικό Βλαβών")
+    st.subheader("📋 Ανοιχτές Βλάβες & Διαχείριση")
     if not df_tickets.empty:
-        c_f1, c_f2 = st.columns(2)
-        with c_f1:
-            search_query = st.text_input("🔍 Αναζήτηση (ID, Περιοχή, Asset):")
-        with c_f2:
-            status_filter = st.multiselect("Φίλτρο Status:", options=["Open", "In Progress", "Pending", "Resolved", "Closed"], default=["Open", "In Progress", "Pending"])
+        open_tickets_df = df_tickets[df_tickets["status"].isin(["Open", "In Progress", "Pending"])]
+        
+        if not open_tickets_df.empty:
+            st.markdown("##### ⚡ Κάντε κλικ σε μια βλάβη για άμεση προβολή & ενημέρωση:")
+            cols = st.columns(2)
+            for idx, (_, row) in enumerate(open_tickets_df.iterrows()):
+                col = cols[idx % 2]
+                with col:
+                    st.markdown(f"""
+                    <div class="ticket-card">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <h4 style="margin:0; color:#38bdf8;">📌 {row['ticket_id']} - {row['category']}</h4>
+                            <span style="background:#ef4444; color:white; padding:2px 8px; border-radius:4px; font-weight:bold; font-size:0.8rem;">{row['priority']}</span>
+                        </div>
+                        <p style="margin:6px 0; color:#cbd5e1;"><b>Περιοχή:</b> {row['building_area']} | <b>Asset:</b> {row['device_asset']}</p>
+                        <p style="margin:0; color:#94a3b8; font-size:0.9rem;">Status: <b style="color:#f59e0b;">{row['status']}</b></p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if st.button(f"🔍 Προβολή & Διαχείριση {row['ticket_id']}", key=f"btn_{row['ticket_id']}"):
+                        st.session_state["active_ticket_id"] = row['ticket_id']
+                        st.rerun()
+        else:
+            st.success("🎉 Δεν υπάρχουν ανοιχτές βλάβες σε εκκρεμότητα!")
 
-        filtered_df = df_tickets.copy()
-        if status_filter:
-            filtered_df = filtered_df[filtered_df["status"].isin(status_filter)]
-        if search_query:
-            filtered_df = filtered_df[
-                filtered_df["ticket_id"].str.contains(search_query, case=False, na=False) |
-                filtered_df["building_area"].str.contains(search_query, case=False, na=False) |
-                filtered_df["device_asset"].str.contains(search_query, case=False, na=False)
-            ]
-
-        # Προβολή ασφαλών στηλών
-        show_cols = [c for c in ["ticket_id", "created_at", "category", "building_area", "device_asset", "priority", "status", "materials_used"] if c in filtered_df.columns]
-        st.dataframe(filtered_df[show_cols], use_container_width=True, hide_index=True)
+        st.markdown("---")
+        st.markdown("##### 📊 Πλήρης Πίνακας Όλων των Βλαβών (Αρχείο)")
+        
+        # Download αρχείου Excel/CSV
+        csv_data = df_tickets.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Εξαγωγή Αναφοράς Βλαβών (CSV / Excel)",
+            data=csv_data,
+            file_name=f"PMI_Tickets_Report_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
+        
+        st.dataframe(df_tickets[["ticket_id", "created_at", "category", "building_area", "device_asset", "priority", "status", "materials_used", "resolution_time_hrs"]], use_container_width=True, hide_index=True)
     else:
         st.info("Δεν υπάρχουν καταχωρημένα tickets στη βάση.")
 
 # TAB 3: ΑΝΑΛΥΤΙΚΗ ΚΑΡΤΕΛΑ & UPDATE
 with tab3:
-    st.subheader("🔍 Αναλυτική Διαχείριση Ticket & Κοστολόγηση")
+    st.subheader("🔍 Αναλυτική Διαχείριση Ticket & Ιστορικό")
     if not df_tickets.empty:
-        selected_tck_id = st.selectbox("Επιλέξτε Ticket ID για προβολή/ενημέρωση:", options=df_tickets["ticket_id"].tolist())
+        ticket_options = df_tickets["ticket_id"].tolist()
+        
+        # Προεπιλογή αν πατήθηκε κουμπί από το Tab 2
+        default_index = 0
+        if st.session_state["active_ticket_id"] in ticket_options:
+            default_index = ticket_options.index(st.session_state["active_ticket_id"])
+            
+        selected_tck_id = st.selectbox("Επιλέξτε Ticket ID για προβολή/ενημέρωση:", options=ticket_options, index=default_index)
         
         t_data = supabase.table("tickets").select("*").eq("ticket_id", selected_tck_id).single().execute().data
         p_data = supabase.table("ticket_photos").select("*").eq("ticket_id", selected_tck_id).execute().data
@@ -320,6 +326,7 @@ with tab3:
             st.write(f"**Προτεραιότητα:** `{t_data['priority']}` | **Κατάσταση:** `{t_data['status']}`")
             st.write(f"**Περιγραφή:** {t_data['description']}")
             st.write(f"**Υλικά:** {t_data.get('materials_used', 'N/A')}")
+            st.write(f"**Ώρες Αποκατάστασης:** `{t_data.get('resolution_time_hrs', 0.0)} hrs`")
             st.caption(f"Ημερομηνία Δημιουργίας: {t_data['created_at']}")
 
         with col_photos:
@@ -349,13 +356,13 @@ with tab3:
             with cu_prof1:
                 updater_role = st.selectbox("Ρόλος Χρήστη που Ενημερώνει", ["Τεχνικός Ασφαλείας / Security Tech", "IT Support / Network Expert", "Supervisor / Team Lead", "Site Security / SOC Operator", "Εξωτερικός Εργολάβος / Vendor"])
             with cu_prof2:
-                updater_name = st.text_input("Ονοματεπώνυμο Χρήστη", placeholder="π.χ. Κώστας / Τεχνικός")
+                updater_name = st.text_input("Ονοματεπώνυμο Χρήστη", placeholder="π.χ. Ανέστης Θεοδωρίδης")
 
             cu1, cu2 = st.columns(2)
             with cu1:
                 new_status = st.selectbox("Νέα Κατάσταση:", ["Open", "In Progress", "Pending", "Resolved", "Closed"], index=["Open", "In Progress", "Pending", "Resolved", "Closed"].index(t_data['status']))
-                add_materials = st.text_input("Επιπλέον Υλικά / Ενέργειες:")
-                res_time = st.number_input("Πραγματικές Ώρες Αποκατάστασης:", min_value=0.0, value=float(t_data.get('resolution_time_hrs', 0.0) or 0.0), step=0.5)
+                add_materials = st.text_input("Επιπλέον Υλικά / Ανταλλακτικά:")
+                res_time = st.number_input("Ώρες Εργασίας / Αποκατάστασης:", min_value=0.0, value=float(t_data.get('resolution_time_hrs', 0.0) or 0.0), step=0.5)
             with cu2:
                 comment = st.text_area("Σχόλιο / Πρόοδος Εργασιών:")
                 new_photos = st.file_uploader("Προσθήκη Φωτογραφιών Αποκατάστασης (After):", type=["jpg", "png", "heic"], accept_multiple_files=True)
