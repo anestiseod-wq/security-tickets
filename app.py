@@ -1,228 +1,296 @@
 import streamlit as st
 import pandas as pd
-import datetime
-import os
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+from datetime import datetime
+from supabase import create_client, Client
 
-# -----------------------------------------------------------------------------
-# CONFIGURATION & SETUP
-# -----------------------------------------------------------------------------
-st.set_page_config(page_title="Security Ticketing System", layout="wide", page_icon="🛡")
+# ---------------------------------------------------------
+# 1. PAGE CONFIG & SUPABASE CONNECTION
+# ---------------------------------------------------------
+st.set_page_config(
+    page_title="Security Systems Ticketing",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-DB_TICKETS = "tickets_db.csv"
-DB_COMMENTS = "comments_db.csv"
-DB_MATERIALS = "materials_db.csv"
+# Σύνδεση με Supabase μέσω Secrets
+@st.cache_resource
+def init_supabase() -> Client:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
-if not os.path.exists(DB_TICKETS):
-    df_t = pd.DataFrame(columns=[
-        "Ticket_ID", "System", "Area_Equipment", "Priority", "Status", 
-        "Description", "Date_Reported", "Date_Resolved", "Assigned_To"
-    ])
-    df_t.to_csv(DB_TICKETS, index=False)
+try:
+    supabase = init_supabase()
+except Exception as e:
+    st.error("⚠️ Σφάλμα σύνδεσης με τη βάση Supabase. Ελέγξτε τα Secrets στο Streamlit Cloud.")
+    st.stop()
 
-if not os.path.exists(DB_COMMENTS):
-    df_c = pd.DataFrame(columns=["Ticket_ID", "Timestamp", "Department", "Author", "Comment"])
-    df_c.to_csv(DB_COMMENTS, index=False)
+# ---------------------------------------------------------
+# 2. CUSTOM CSS (DARK SOC THEME)
+# ---------------------------------------------------------
+st.markdown("""
+    <style>
+    .stApp { background-color: #0f172a; color: #f8fafc; }
+    .main-header {
+        background: linear-gradient(90deg, #1e293b 0%, #0f172a 100%);
+        padding: 20px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 25px;
+    }
+    [data-testid="stMetric"] {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        border: 1px solid #334155; padding: 16px; border-radius: 12px;
+    }
+    [data-testid="stMetricLabel"] { color: #94a3b8 !important; font-weight: 600; }
+    [data-testid="stMetricValue"] { color: #38bdf8 !important; font-weight: 700 !important; }
+    h1, h2, h3 { color: #38bdf8 !important; }
+    .stButton>button {
+        width: 100%; background-color: #0284c7; color: #ffffff;
+        border: 1px solid #38bdf8; border-radius: 8px; font-weight: 600;
+    }
+    div[data-testid="stForm"] {
+        background-color: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 12px;
+    }
+    .history-card {
+        background-color: #1e293b; border-left: 4px solid #38bdf8;
+        padding: 10px 15px; margin-bottom: 10px; border-radius: 4px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-if not os.path.exists(DB_MATERIALS):
-    df_m = pd.DataFrame(columns=["Ticket_ID", "Item_Name", "Quantity", "Unit_Cost_EUR", "Total_Cost_EUR", "Order_Status"])
-    df_m.to_csv(DB_MATERIALS, index=False)
+# ---------------------------------------------------------
+# 3. HELPER FUNCTIONS
+# ---------------------------------------------------------
+def generate_ticket_id():
+    """Αυτόματη αρίθμηση TCK-0001, TCK-0002..."""
+    res = supabase.table("tickets").select("id", order="id.desc").limit(1).execute()
+    if res.data:
+        next_num = res.data[0]['id'] + 1
+    else:
+        next_num = 1
+    return f"TCK-{next_num:04d}"
 
-def load_data():
-    return pd.read_csv(DB_TICKETS), pd.read_csv(DB_COMMENTS), pd.read_csv(DB_MATERIALS)
+def upload_photos_to_supabase(files, ticket_id, photo_type="BEFORE"):
+    """Μεταφόρτωση φωτογραφιών στο Supabase Storage & εγγραφή στο DB"""
+    urls = []
+    for idx, file in enumerate(files):
+        if file is not None:
+            file_ext = file.name.split('.')[-1] if hasattr(file, 'name') else 'jpg'
+            file_path = f"{ticket_id}/{photo_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{idx}.{file_ext}"
+            
+            # Upload στο Storage Bucket
+            file_bytes = file.getvalue()
+            supabase.storage.from_("ticket-photos").upload(file_path, file_bytes)
+            
+            # Public URL
+            public_url = supabase.storage.from_("ticket-photos").get_public_url(file_path)
+            
+            # Εγγραφή στον πίνακα ticket_photos
+            supabase.table("ticket_photos").insert({
+                "ticket_id": ticket_id,
+                "photo_url": public_url,
+                "photo_type": photo_type
+            }).execute()
+            urls.append(public_url)
+    return urls
 
-tickets_df, comments_df, materials_df = load_data()
+# ---------------------------------------------------------
+# 4. HEADER & KPI METRICS
+# ---------------------------------------------------------
+st.markdown("""
+    <div class="main-header">
+        <h1 style="margin:0;">🛡️ Security Systems Maintenance Portal</h1>
+        <p style="margin:5px 0 0 0; color: #94a3b8;">Live Supabase Database Integration</p>
+    </div>
+""", unsafe_allow_html=True)
 
-# -----------------------------------------------------------------------------
-# HEADER & KPIS
-# -----------------------------------------------------------------------------
-st.title("🛡️ Security Systems Maintenance Ticketing System")
-st.markdown("---")
+# Ανάκτηση δεδομένων από Supabase
+tickets_res = supabase.table("tickets").select("*").order("created_at", desc=True).execute()
+df_tickets = pd.DataFrame(tickets_res.data) if tickets_res.data else pd.DataFrame()
 
-total_issues = len(tickets_df)
-open_critical = len(tickets_df[(tickets_df["Status"] != "Closed") & (tickets_df["Priority"] == "Critical")])
-
-closed_tickets = tickets_df[tickets_df["Status"] == "Closed"].copy()
-if not closed_tickets.empty:
-    closed_tickets["Date_Reported"] = pd.to_datetime(closed_tickets["Date_Reported"])
-    closed_tickets["Date_Resolved"] = pd.to_datetime(closed_tickets["Date_Resolved"])
-    closed_tickets["Downtime"] = (closed_tickets["Date_Resolved"] - closed_tickets["Date_Reported"]).dt.total_seconds() / 3600
-    avg_mttr = round(closed_tickets["Downtime"].mean(), 1)
-else:
-    avg_mttr = 0.0
-
-total_cost = materials_df["Total_Cost_EUR"].sum() if not materials_df.empty else 0.0
+total_tck = len(df_tickets)
+open_tck = len(df_tickets[df_tickets["status"].isin(["Open", "In Progress", "Pending"])]) if not df_tickets.empty else 0
+critical_tck = len(df_tickets[(df_tickets["priority"] == "Critical") & (df_tickets["status"] != "Closed")]) if not df_tickets.empty else 0
+mttr = df_tickets[df_tickets["status"] == "Closed"]["resolution_time_hrs"].mean() if not df_tickets.empty and "resolution_time_hrs" in df_tickets.columns else 0.0
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("TOTAL ISSUES", total_issues)
-col2.metric("OPEN / CRITICAL", open_critical, delta_color="inverse")
-col3.metric("AVG MTTR (HOURS)", f"{avg_mttr} hrs")
-col4.metric("PARTS COST (€)", f"€ {total_cost:,.2f}")
+col1.metric("Συνολικά Tickets", total_tck)
+col2.metric("Ανοιχτά / Σε εξέλιξη", open_tck)
+col3.metric("Critical Εκκρεμή", critical_tck, delta="Υψηλή Προτεραιότητα" if critical_tck > 0 else "OK", delta_color="inverse")
+col4.metric("MTTR (Μ.Ο. Επισκευής)", f"{mttr:.1f} hrs" if pd.notnull(mttr) else "0.0 hrs")
 
-st.markdown("---")
+st.markdown("<br>", unsafe_allow_html=True)
 
-# -----------------------------------------------------------------------------
-# SIDEBAR: ΝΕΟ TICKET
-# -----------------------------------------------------------------------------
-st.sidebar.header("➕ Καταχώρηση Νέας Βλάβης")
+# ---------------------------------------------------------
+# 5. TABS: ΔΗΜΙΟΥΡΓΙΑ - ΠΙΝΑΚΑΣ - ΚΑΡΤΕΛΑ TICKET
+# ---------------------------------------------------------
+tab1, tab2, tab3 = st.tabs(["📝 Νέο Ticket", "📊 Πίνακας & Φίλτρα", "🔍 Αναλυτική Καρτέλα Ticket"])
 
-sys_cat = st.sidebar.selectbox("Σύστημα", ["CCTV", "Access Control", "Fire Alarm", "Perimeter", "Intercom"])
-area_eq = st.sidebar.text_input("Περιοχή / Εξοπλισμός", placeholder="π.χ. Parking / CAM 5 Multi-Lens")
-priority = st.sidebar.selectbox("Προτεραιότητα", ["Critical", "High", "Medium", "Low"])
+# TAB 1: ΝΕΟ TICKET
+with tab1:
+    st.subheader("Καταγραφή Νέου Περιστατικού")
+    with st.form("new_ticket_form", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            category = st.selectbox("Κατηγορία", ["CCTV", "ACS (Access Control)", "Fire Alarm", "Intrusion Alarm", "Gates/Barriers", "Network/PoE"])
+            building_area = st.text_input("Κτίριο / Περιοχή", placeholder="π.χ. BLD8 - Είσοδος")
+            device_asset = st.text_input("Συσκευή / Asset ID", placeholder="π.χ. CAM-12")
+            priority = st.selectbox("Προτεραιότητα", ["Low", "Medium", "High", "Critical"])
+        with c2:
+            status = st.selectbox("Κατάσταση", ["Open", "In Progress", "Pending"])
+            materials = st.text_input("Αρχικά Υλικά / Ανταλλακτικά")
+            description = st.text_area("Περιγραφή Βλάβης")
 
-template_text = f"""📌 [ΑΝΑΦΟΡΑ ΒΛΑΒΗΣ ΣΥΣΤΗΜΑΤΩΝ ΑΣΦΑΛΕΙΑΣ]
--------------------------------------------
-• Σύστημα: {sys_cat}
-• Περιοχή/Εξοπλισμός: {area_eq}
-• Περιγραφή Σφάλματος: [Γράψτε εδώ τη βλάβη...]
-• Αρχικές Ενέργειες: Έγινε αρχικός έλεγχος τροφοδοσίας / επανεκκίνηση."""
+        st.markdown("##### 📸 Φωτογραφίες Βλάβης (Before)")
+        up_files = st.file_uploader("Επιλογή από Gallery/Αρχεία (Πολλαπλά)", type=["jpg", "png", "heic"], accept_multiple_files=True)
+        cam_file = st.camera_input("Ή Λήψη από Κάμερα Κινητού")
 
-description = st.sidebar.text_area("Περιγραφή Βλάβης", value=template_text, height=180)
-uploaded_file = st.sidebar.file_uploader("📷 Φωτογραφία Βλάβης (Προαιρετικό)", type=["jpg", "png", "jpeg"])
+        if st.form_submit_button("💾 Δημιουργία Ticket"):
+            t_id = generate_ticket_id()
+            
+            # 1. Εγγραφή Ticket
+            new_ticket = {
+                "ticket_id": t_id,
+                "category": category,
+                "building_area": building_area,
+                "device_asset": device_asset,
+                "priority": priority,
+                "status": status,
+                "description": description,
+                "materials_used": materials
+            }
+            supabase.table("tickets").insert(new_ticket).execute()
 
-if st.sidebar.button("🚀 Υποβολή Ticket"):
-    if area_eq:
-        new_id = f"INC-{len(tickets_df) + 1:03d}"
-        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        photo_path = ""
-        if uploaded_file is not None:
-            os.makedirs("uploads", exist_ok=True)
-            photo_path = f"uploads/{new_id}_{uploaded_file.name}"
-            with open(photo_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
+            # 2. Upload Φωτογραφιών
+            all_files = (up_files if up_files else []) + ([cam_file] if cam_file else [])
+            if all_files:
+                upload_photos_to_supabase(all_files, t_id, photo_type="BEFORE")
 
-        new_ticket = pd.DataFrame([{
-            "Ticket_ID": new_id,
-            "System": sys_cat,
-            "Area_Equipment": area_eq,
-            "Priority": priority,
-            "Status": "New",
-            "Description": description,
-            "Date_Reported": now,
-            "Date_Resolved": "",
-            "Assigned_To": "Unassigned"
-        }])
-        
-        tickets_df = pd.concat([tickets_df, new_ticket], ignore_index=True)
-        tickets_df.to_csv(DB_TICKETS, index=False)
-        
-        st.sidebar.success(f"Το Ticket {new_id} δημιουργήθηκε με επιτυχία!")
-        st.rerun()
+            # 3. Εγγραφή στο Ιστορικό (Audit Trail)
+            supabase.table("ticket_updates").insert({
+                "ticket_id": t_id,
+                "status_changed_to": status,
+                "comment": "Αρχική δημιουργία βλάβης.",
+                "action_type": "CREATED"
+            }).execute()
+
+            st.success(f"✅ Το Ticket **{t_id}** δημιουργήθηκε και αποθηκεύτηκε μόνιμα!")
+            st.rerun()
+
+# TAB 2: ΠΙΝΑΚΑΣ & ΦΙΛΤΡΑ
+with tab2:
+    st.subheader("Αναζήτηση & Ιστορικό Βλαβών")
+    if not df_tickets.empty:
+        c_f1, c_f2 = st.columns(2)
+        with c_f1:
+            search_query = st.text_input("🔍 Αναζήτηση (ID, Περιοχή, Asset):")
+        with c_f2:
+            status_filter = st.multiselect("Φίλτρο Status:", options=["Open", "In Progress", "Pending", "Resolved", "Closed"], default=["Open", "In Progress", "Pending"])
+
+        filtered_df = df_tickets.copy()
+        if status_filter:
+            filtered_df = filtered_df[filtered_df["status"].isin(status_filter)]
+        if search_query:
+            filtered_df = filtered_df[
+                filtered_df["ticket_id"].str.contains(search_query, case=False, na=False) |
+                filtered_df["building_area"].str.contains(search_query, case=False, na=False) |
+                filtered_df["device_asset"].str.contains(search_query, case=False, na=False)
+            ]
+
+        st.dataframe(
+            filtered_df[["ticket_id", "created_at", "category", "building_area", "device_asset", "priority", "status"]],
+            use_container_width=True, hide_index=True
+        )
     else:
-        st.sidebar.error("Παρακαλώ συμπληρώστε την Περιοχή/Εξοπλισμός.")
+        st.info("Δεν υπάρχουν καταχωρημένα tickets στη βάση.")
 
-# -----------------------------------------------------------------------------
-# MAIN VIEW: ΠΙΝΑΚΑΣ ΒΛΑΒΩΝ & ΕΠΕΞΕΡΓΑΣΙΑ
-# -----------------------------------------------------------------------------
-st.subheader("📋 Λίστα Βλαβών & Διαχείριση")
-
-if not tickets_df.empty:
-    for idx, row in tickets_df.iloc[::-1].iterrows():
-        t_id = row["Ticket_ID"]
-        status = row["Status"]
-        priority_val = row["Priority"]
+# TAB 3: ΑΝΑΛΥΤΙΚΗ ΚΑΡΤΕΛΑ TICKET & UPDATE
+with tab3:
+    st.subheader("🔍 Αναλυτική Διαχείριση Ticket")
+    if not df_tickets.empty:
+        selected_tck_id = st.selectbox("Επιλέξτε Ticket ID για προβολή/ενημέρωση:", options=df_tickets["ticket_id"].tolist())
         
-        status_color = "🔴" if status in ["New", "In Progress"] else ("🟡" if status == "Pending Parts" else "🟢")
+        # Ανάκτηση στοιχείων Ticket
+        t_data = supabase.table("tickets").select("*").eq("ticket_id", selected_tck_id).single().execute().data
+        p_data = supabase.table("ticket_photos").select("*").eq("ticket_id", selected_tck_id).execute().data
+        u_data = supabase.table("ticket_updates").select("*").eq("ticket_id", selected_tck_id).order("created_at", desc=True).execute().data
+
+        col_info, col_photos = st.columns([1, 1])
         
-        with st.expander(f"{status_color} **{t_id}** | {row['System']} | {row['Area_Equipment']} | Priority: **{priority_val}** | Status: **{status}**"):
-            col_left, col_right = st.columns([2, 1])
-            
-            with col_left:
-                st.markdown("**Περιγραφή:**")
-                st.text(row["Description"])
-                st.caption(f"🕒 Ημερομηνία Αναφοράς: {row['Date_Reported']}")
+        with col_info:
+            st.markdown(f"### 📌 {t_data['ticket_id']} - {t_data['category']}")
+            st.write(f"**Περιοχή:** {t_data['building_area']} | **Συσκευή:** {t_data['device_asset']}")
+            st.write(f"**Προτεραιότητα:** {t_data['priority']} | **Κατάσταση:** `{t_data['status']}`")
+            st.write(f"**Περιγραφή:** {t_data['description']}")
+            st.write(f"**Υλικά:** {t_data['materials_used']}")
+            st.caption(f"Ημερομηνία Δημιουργίας: {t_data['created_at']}")
+
+        with col_photos:
+            st.markdown("### 📸 Φωτογραφικό Υλικό")
+            if p_data:
+                tab_before, tab_after = st.tabs(["📷 Βλάβη (Before)", "🛠️ Αποκατάσταση (After)"])
+                with tab_before:
+                    bef_photos = [p['photo_url'] for p in p_data if p.get('photo_type') == 'BEFORE']
+                    if bef_photos:
+                        st.image(bef_photos, width=180, caption=["Before"]*len(bef_photos))
+                    else:
+                        st.write("Καμία φωτογραφία βλάβης.")
+                with tab_after:
+                    aft_photos = [p['photo_url'] for p in p_data if p.get('photo_type') == 'AFTER']
+                    if aft_photos:
+                        st.image(aft_photos, width=180, caption=["After"]*len(aft_photos))
+                    else:
+                        st.write("Καμία φωτογραφία αποκατάστασης.")
+            else:
+                st.write("Δεν υπάρχουν συνημμένες φωτογραφίες.")
+
+        st.markdown("---")
+        
+        # ΦΟΡΜΑ ΕΝΗΜΕΡΩΣΗΣ (UPDATES)
+        st.markdown("### 🔄 Προσθήκη Ενημέρωσης / Αλλαγή Κατάστασης")
+        with st.form("update_ticket_form"):
+            cu1, cu2 = st.columns(2)
+            with cu1:
+                new_status = st.selectbox("Νέα Κατάσταση:", ["Open", "In Progress", "Pending", "Resolved", "Closed"], index=["Open", "In Progress", "Pending", "Resolved", "Closed"].index(t_data['status']))
+                add_materials = st.text_input("Επιπλέον Υλικά / Ενέργειες:")
+                res_time = st.number_input("Ώρες Αποκατάστασης (αν έκλεισε):", min_value=0.0, value=float(t_data['resolution_time_hrs'] or 0.0), step=0.5)
+            with cu2:
+                comment = st.text_area("Σχόλιο / Πρόοδος Εργασιών:")
+                new_photos = st.file_uploader("Προσθήκη Φωτογραφιών Αποκατάστασης (After):", type=["jpg", "png", "heic"], accept_multiple_files=True)
+
+            if st.form_submit_button("💾 Αποθήκευση Ενημέρωσης"):
+                # 1. Update Ticket Table
+                upd_payload = {
+                    "status": new_status,
+                    "resolution_time_hrs": res_time,
+                    "materials_used": f"{t_data['materials_used']} | {add_materials}" if add_materials else t_data['materials_used']
+                }
+                if new_status == "Closed":
+                    upd_payload["closed_at"] = datetime.now().isoformat()
                 
-                img_dir = "uploads"
-                if os.path.exists(img_dir):
-                    for img_file in os.listdir(img_dir):
-                        if img_file.startswith(t_id):
-                            st.image(os.path.join(img_dir, img_file), caption="Συνημμένη Φωτογραφία", width=300)
+                supabase.table("tickets").update(upd_payload).eq("ticket_id", selected_tck_id).execute()
 
-            with col_right:
-                st.markdown("**🔄 Επεξεργασία & Αλλαγή Κατάστασης**")
-                
-                stat_options = ["New", "In Progress", "Pending Parts", "Closed"]
-                stat_index = stat_options.index(status) if status in stat_options else 0
-                new_status = st.selectbox("Status", stat_options, index=stat_index, key=f"stat_{t_id}")
-                
-                prio_options = ["Critical", "High", "Medium", "Low"]
-                prio_index = prio_options.index(priority_val) if priority_val in prio_options else 0
-                new_priority = st.selectbox("Priority", prio_options, index=prio_index, key=f"prio_{t_id}")
-                
-                assigned = st.text_input("Υπεύθυνος (Assigned To)", value=str(row["Assigned_To"]), key=f"ass_{t_id}")
-                
-                if st.button("💾 Ενημέρωση Ticket", key=f"save_{t_id}"):
-                    tickets_df.loc[tickets_df["Ticket_ID"] == t_id, "Status"] = new_status
-                    tickets_df.loc[tickets_df["Ticket_ID"] == t_id, "Priority"] = new_priority
-                    tickets_df.loc[tickets_df["Ticket_ID"] == t_id, "Assigned_To"] = assigned
-                    
-                    if new_status == "Closed" and not str(row["Date_Resolved"]):
-                        tickets_df.loc[tickets_df["Ticket_ID"] == t_id, "Date_Resolved"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    
-                    tickets_df.to_csv(DB_TICKETS, index=False)
-                    st.success("Ενημερώθηκε!")
-                    st.rerun()
+                # 2. Upload After Photos
+                if new_photos:
+                    upload_photos_to_supabase(new_photos, selected_tck_id, photo_type="AFTER")
 
-            # -----------------------------------------------------------------
-            # TICKET COMMENTS & DISCUSSION THREAD
-            # -----------------------------------------------------------------
-            st.markdown("---")
-            st.markdown("💬 **Ιστορικό Συζήτησης / Σχόλια**")
-            
-            t_comments = comments_df[comments_df["Ticket_ID"] == t_id]
-            for _, c_row in t_comments.iterrows():
-                st.info(f"**[{c_row['Timestamp']}] {c_row['Author']} ({c_row['Department']}):**\n{c_row['Comment']}")
+                # 3. Log Audit Trail
+                supabase.table("ticket_updates").insert({
+                    "ticket_id": selected_tck_id,
+                    "status_changed_to": new_status,
+                    "comment": comment if comment else "Ενημέρωση στοιχείων.",
+                    "action_type": "UPDATE"
+                }).execute()
 
-            c_col1, c_col2, c_col3 = st.columns([1, 1, 2])
-            dept = c_col1.selectbox("Τμήμα", ["Security", "IT", "Technical Dept"], key=f"dept_{t_id}")
-            author = c_col2.text_input("Όνομα", value="Security Admin", key=f"auth_{t_id}")
-            comment_txt = c_col3.text_input("Νέο Σχόλιο / Απάντηση", key=f"txt_{t_id}")
-            
-            if st.button("➕ Προσθήκη Σχολίου", key=f"btn_c_{t_id}"):
-                if comment_txt:
-                    now_c = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    new_c = pd.DataFrame([{
-                        "Ticket_ID": t_id,
-                        "Timestamp": now_c,
-                        "Department": dept,
-                        "Author": author,
-                        "Comment": comment_txt
-                    }])
-                    comments_df = pd.concat([comments_df, new_c], ignore_index=True)
-                    comments_df.to_csv(DB_COMMENTS, index=False)
-                    st.success("Το σχόλιο καταχωρήθηκε!")
-                    st.rerun()
+                st.success("✅ Το Ticket ενημερώθηκε με επιτυχία!")
+                st.rerun()
 
-            # -----------------------------------------------------------------
-            # MATERIALS & COSTS
-            # -----------------------------------------------------------------
-            st.markdown("📦 **Υλικά & Κόστος Ανταλλακτικών**")
-            t_mats = materials_df[materials_df["Ticket_ID"] == t_id]
-            if not t_mats.empty:
-                st.dataframe(t_mats[["Item_Name", "Quantity", "Unit_Cost_EUR", "Total_Cost_EUR", "Order_Status"]], use_container_width=True)
-
-            m_col1, m_col2, m_col3, m_col4 = st.columns([2, 1, 1, 1])
-            item_name = m_col1.text_input("Όνομα Υλικού", key=f"mname_{t_id}")
-            qty = m_col2.number_input("Ποσότητα", min_value=1, value=1, key=f"mqty_{t_id}")
-            u_cost = m_col3.number_input("Τιμή Μονάδας (€)", min_value=0.0, value=0.0, key=f"mcost_{t_id}")
-            
-            if m_col4.button("➕ Προσθήκη Υλικού", key=f"mbtn_{t_id}"):
-                if item_name:
-                    new_m = pd.DataFrame([{
-                        "Ticket_ID": t_id,
-                        "Item_Name": item_name,
-                        "Quantity": qty,
-                        "Unit_Cost_EUR": u_cost,
-                        "Total_Cost_EUR": qty * u_cost,
-                        "Order_Status": "Requested"
-                    }])
-                    materials_df = pd.concat([materials_df, new_m], ignore_index=True)
-                    materials_df.to_csv(DB_MATERIALS, index=False)
-                    st.success("Το υλικό προστέθηκε!")
-                    st.rerun()
-
-else:
-    st.info("Δεν υπάρχουν καταχωρημένες βλάβες.")
+        # AUDIT TRAIL / ΙΣΤΟΡΙΚΟ
+        st.markdown("### 📜 Ιστορικό Ενεργειών (Audit Trail)")
+        if u_data:
+            for log in u_data:
+                st.markdown(f"""
+                <div class="history-card">
+                    <small style="color:#94a3b8;">{log['created_at']} - Status: <b>{log['status_changed_to']}</b></small><br>
+                    <span>{log['comment']}</span>
+                </div>
+                """, unsafe_allow_html=True)
