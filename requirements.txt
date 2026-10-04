@@ -1,2 +1,5 @@
-streamlit
+ststreamlit
+pandas
+supabase
+st-supabase-connectionreamlit
 pandas
