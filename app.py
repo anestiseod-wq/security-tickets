@@ -10,10 +10,39 @@ from supabase import create_client, Client
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="PMI - Security Maintenance Hub (DEMO)",
-    page_icon="🛡️",
+    page_icon="🛡️️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# 🔒 ΣΥΣΤΗΜΑ ΑΣΦΑΛΕΙΑΣ / ΚΛΕΙΔΩΜΑ ΜΕ PIN
+APP_PIN = "2020"  # <-- Μπορείς να αλλάξεις τον κωδικό εδώ!
+
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.markdown("""
+        <style>
+        .stApp { background-color: #0b1329; color: #f8fafc; }
+        div[data-testid="stForm"] { background-color: #1e293b; border: 1px solid #38bdf8; padding: 30px; border-radius: 16px; max-width: 450px; margin: 50px auto; }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("<h2 style='text-align: center; color: #38bdf8;'>🛡️ PMI Security Hub</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #94a3b8;'>Εισάγετε τον κωδικό πρόσβασης για είσοδο στο Demo:</p>", unsafe_allow_html=True)
+    
+    with st.form("login_form"):
+        user_pin = st.text_input("🔑 Κωδικός Πρόσβασης (PIN):", type="password")
+        submit_pin = st.form_submit_button("🔓 Είσοδος στο Σύστημα")
+        
+        if submit_pin:
+            if user_pin == APP_PIN:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("❌ Λανθασμένος κωδικός πρόσβασης.")
+    st.stop()  # Διακόπτει την εκτέλεση αν δεν δοθεί ο σωστός κωδικός!
 
 @st.cache_resource
 def init_supabase() -> Client:
@@ -206,11 +235,9 @@ def format_audit_trail(raw_text):
     if not raw_text or not str(raw_text).strip():
         return '<div class="audit-entry-card">Δεν υπάρχει καταγεγραμμένο ιστορικό.</div>'
     
-    # Διαχωρισμός με βάση τα timestamps της μορφής [DD/MM/YYYY HH:MM ...]
     parts = re.split(r'(?=\[\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})', str(raw_text).strip())
     entries = [p.strip() for p in parts if p.strip()]
     
-    # Ταξινόμηση ώστε οι νεότερες ημερομηνίες/ώρες να μπαίνουν ΠΡΩΤΕΣ (κορυφή)
     def extract_dt(text):
         match = re.search(r'\[(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})', text)
         if match:
@@ -547,7 +574,7 @@ elif st.session_state.view_mode == "list_tickets":
                     st.session_state.view_mode = "home"
                     st.rerun()
                 except Exception as e:
-                    st.error(f"⚠️ Σφάλμα ενημέρωσης: {e}")
+                    st.error(f"⚠️️ Σφάλμα ενημέρωσης: {e}")
 
     # ΑΝ ΔΕΝ ΕΧΕΙ ΕΠΙΛΕΓΕΙ ΒΛΑΒΗ -> ΕΜΦΑΝΙΖΕΤΑΙ Η ΛΙΣΤΑ ΟΜΑΔΟΠΟΙΗΜΕΝΗ ΑΝΑ ΗΜΕΡΟΜΗΝΙΑ
     else:
