@@ -92,13 +92,6 @@ st.markdown("""
         padding: 12px 20px !important;
     }
     
-    div[data-testid="stForm"] { 
-        background-color: #1e293b; 
-        border: 1px solid #334155; 
-        padding: 24px; 
-        border-radius: 16px; 
-    }
-    
     .full-card {
         background-color: #0f172a;
         border: 1px solid #334155;
@@ -127,7 +120,7 @@ st.markdown("""
         color: #f8fafc;
         font-family: monospace;
         white-space: pre-wrap;
-        max-height: 250px;
+        max-height: 300px;
         overflow-y: auto;
     }
     </style>
@@ -148,14 +141,16 @@ def get_b64_img(file):
     return None
 
 # ---------------------------------------------------------
-# 3. DATA RETRIEVAL & ALL KPIs CALCULATIONS
+# 3. DATA RETRIEVAL (FRESH FROM SUPABASE)
 # ---------------------------------------------------------
-try:
-    tickets_res = supabase.table("tickets").select("*").order("created_at", desc=True).execute()
-    df_tickets = pd.DataFrame(tickets_res.data) if tickets_res.data else pd.DataFrame()
-except Exception:
-    df_tickets = pd.DataFrame()
+def fetch_data():
+    try:
+        tickets_res = supabase.table("tickets").select("*").order("created_at", desc=True).execute()
+        return pd.DataFrame(tickets_res.data) if tickets_res.data else pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
 
+df_tickets = fetch_data()
 HOURLY_RATE = 25.0  # €/ώρα εργασίας τεχνικού
 
 if not df_tickets.empty:
@@ -409,54 +404,56 @@ elif st.session_state.view_mode == "list_tickets":
             st.markdown("<br>", unsafe_allow_html=True)
 
             st.markdown("##### 🔄 Φόρμα Ενημέρωσης & Κλεισίματος Βλάβης")
-            with st.form(key=f"update_form_{row['ticket_id']}"):
-                u1, u2, u3 = st.columns(3)
-                with u1:
-                    tech_name = st.text_input("👤 Ονοματεπώνυμο", placeholder="Ονοματεπώνυμο")
-                with u2:
-                    up_role = st.selectbox("🎭 Ρόλος", ["Security Systems Admin", "Technical Expert", "G4S Security Officer", "Shift Supervisor", "External Contractor"])
-                with u3:
-                    st_options = ["Open", "Pending", "Closed"]
-                    curr_st_idx = st_options.index(row['status']) if row['status'] in st_options else 0
-                    up_status = st.selectbox("Κατάσταση", st_options, index=curr_st_idx)
+            
+            u1, u2, u3 = st.columns(3)
+            with u1:
+                tech_name = st.text_input("👤 Ονοματεπώνυμο", placeholder="Ονοματεπώνυμο")
+            with u2:
+                up_role = st.selectbox("🎭 Ρόλος", ["Security Systems Admin", "Technical Expert", "G4S Security Officer", "Shift Supervisor", "External Contractor"])
+            with u3:
+                st_options = ["Open", "Pending", "Closed"]
+                curr_st_idx = st_options.index(row['status']) if row['status'] in st_options else 0
+                up_status = st.selectbox("Κατάσταση", st_options, index=curr_st_idx)
 
-                up_hours = st.number_input("⏱️ Σύνολο Ωρών (hrs)", min_value=0.0, max_value=200.0, value=float(row.get('resolution_time_hrs', 0.0) or 0.0), step=0.5)
-                up_mats = st.text_area("🛠️ Περιγραφή Υλικών / Ανταλλακτικών", value=str(row.get('materials_used', '') or ''))
-                new_notes = st.text_area("✍️ Προσθήκη Νέων Ενεργειών / Σημειώσεων", placeholder="Γράψτε τις νέες ενέργειες που πραγματοποιήθηκαν...")
+            up_hours = st.number_input("⏱️ Σύνολο Ωρών (hrs)", min_value=0.0, max_value=200.0, value=float(row.get('resolution_time_hrs', 0.0) or 0.0), step=0.5)
+            up_mats = st.text_area("🛠️ Περιγραφή Υλικών / Ανταλλακτικών", value=str(row.get('materials_used', '') or ''))
+            new_notes = st.text_area("✍️ Προσθήκη Νέων Ενεργειών / Σημειώσεων", placeholder="Γράψτε τις νέες ενέργειες που πραγματοποιήθηκαν...")
 
-                st.markdown("##### 📁 Προσθήκη / Αλλαγή Αρχείου Εικόνας")
-                up_file = st.file_uploader("Νέο Αρχείο Εικόνας", type=["jpg", "jpeg", "png"])
+            st.markdown("##### 📁 Προσθήκη / Αλλαγή Αρχείου Εικόνας")
+            up_file = st.file_uploader("Νέο Αρχείο Εικόνας", type=["jpg", "jpeg", "png"])
 
-                if st.form_submit_button("💾 Αποθήκευση Ενημέρωσης στη Βάση"):
-                    now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
-                    t_prefix = f"[{now_str} - Χρήστης: {tech_name} ({up_role})]" if tech_name.strip() else f"[{now_str} - Ενημέρωση]"
-                    
-                    # ΔΙΑΤΗΡΗΣΗ ΠΑΛΙΟΥ ΙΣΤΟΡΙΚΟΥ + ΠΡΟΣΘΗΚΗ ΝΕΩΝ ΣΗΜΕΙΩΣΕΩΝ
-                    updated_desc = str(row['description'])
-                    if new_notes.strip():
-                        updated_desc += f"\n\n{t_prefix}:\n{new_notes.strip()}"
-                    elif tech_name.strip():
-                        updated_desc += f"\n\n{t_prefix}: Αλλαγή κατάστασης σε {up_status}."
+            if st.button("💾 Αποθήκευση Ενημέρωσης στη Βάση"):
+                now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
+                t_prefix = f"[{now_str} - Χρήστης: {tech_name} ({up_role})]" if tech_name.strip() else f"[{now_str} - Ενημέρωση]"
+                
+                # Προσθήκη νέου ιστορικού στο παλιό
+                old_desc = str(row['description']) if pd.notnull(row['description']) else ""
+                if new_notes.strip():
+                    updated_desc = f"{old_desc}\n\n{t_prefix}:\n{new_notes.strip()}"
+                elif tech_name.strip():
+                    updated_desc = f"{old_desc}\n\n{t_prefix}: Αλλαγή κατάστασης σε {up_status}."
+                else:
+                    updated_desc = old_desc
 
-                    payload = {
-                        "status": up_status,
-                        "resolution_time_hrs": float(up_hours),
-                        "materials_used": up_mats,
-                        "description": updated_desc
-                    }
+                payload = {
+                    "status": up_status,
+                    "resolution_time_hrs": float(up_hours),
+                    "materials_used": up_mats,
+                    "description": updated_desc
+                }
 
-                    if up_file is not None:
-                        new_b64 = get_b64_img(up_file)
-                        if new_b64:
-                            payload["photo_url"] = new_b64
+                if up_file is not None:
+                    new_b64 = get_b64_img(up_file)
+                    if new_b64:
+                        payload["photo_url"] = new_b64
 
-                    try:
-                        supabase.table("tickets").update(payload).eq("ticket_id", row['ticket_id']).execute()
-                        st.session_state.success_msg = f"✅ Η βλάβη **{row['ticket_id']}** ενημερώθηκε επιτυχώς!"
-                        st.session_state.view_mode = "home"
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"⚠️ Σφάλμα ενημέρωσης: {e}")
+                try:
+                    supabase.table("tickets").update(payload).eq("ticket_id", row['ticket_id']).execute()
+                    st.session_state.success_msg = f"✅ Η βλάβη **{row['ticket_id']}** ενημερώθηκε επιτυχώς!"
+                    st.session_state.view_mode = "home"
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"⚠️ Σφάλμα ενημέρωσης: {e}")
 
     else:
         st.subheader("📋 Λίστα Όλων των Βλαβών (Πατήστε σε μια βλάβη για ανάλυση)")
