@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import base64
+import re
 from supabase import create_client, Client
 
 # ---------------------------------------------------------
@@ -155,19 +156,30 @@ st.markdown("""
         margin-bottom: 20px;
     }
     
-    .audit-box {
+    .audit-entry-card {
         background-color: #1e293b;
-        border: 1px solid #475569;
-        padding: 15px;
+        border: 1px solid #334155;
+        border-left: 4px solid #38bdf8;
+        padding: 12px 16px;
         border-radius: 10px;
+        margin-bottom: 10px;
         color: #f8fafc;
-        font-family: monospace;
         white-space: pre-wrap;
-        max-height: 300px;
-        overflow-y: auto;
+        font-family: inherit;
     }
 
-    /* Περιορισμός μεγέθους φωτογραφίας */
+    .audit-entry-card-newest {
+        background-color: #0f172a;
+        border: 1px solid #0284c7;
+        border-left: 5px solid #10b981;
+        padding: 12px 16px;
+        border-radius: 10px;
+        margin-bottom: 12px;
+        color: #f8fafc;
+        white-space: pre-wrap;
+        font-family: inherit;
+    }
+
     .small-photo-container img {
         max-width: 380px !important;
         max-height: 300px !important;
@@ -189,6 +201,33 @@ def get_b64_img(file):
         except Exception:
             return None
     return None
+
+def format_audit_trail(raw_text):
+    if not raw_text or not str(raw_text).strip():
+        return '<div class="audit-entry-card">Δεν υπάρχει καταγεγραμμένο ιστορικό.</div>'
+    
+    # Διαχωρισμός με βάση τα timestamps της μορφής [DD/MM/YYYY HH:MM ...]
+    parts = re.split(r'(?=\[\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})', str(raw_text).strip())
+    entries = [p.strip() for p in parts if p.strip()]
+    
+    # Ταξινόμηση ώστε οι νεότερες ημερομηνίες/ώρες να μπαίνουν ΠΡΩΤΕΣ (κορυφή)
+    def extract_dt(text):
+        match = re.search(r'\[(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})', text)
+        if match:
+            try:
+                return datetime.strptime(match.group(1), '%d/%m/%Y %H:%M')
+            except Exception:
+                return datetime.min
+        return datetime.min
+
+    entries.sort(key=extract_dt, reverse=True)
+    
+    html_out = ""
+    for idx, entry in enumerate(entries):
+        css_class = "audit-entry-card-newest" if idx == 0 else "audit-entry-card"
+        html_out += f'<div class="{css_class}">{entry}</div>'
+    
+    return html_out
 
 # ---------------------------------------------------------
 # 3. DATA RETRIEVAL
@@ -454,7 +493,8 @@ elif st.session_state.view_mode == "list_tickets":
                     st.info("Δεν ήταν δυνατή η προεπισκόπηση της φωτογραφίας.")
 
             st.markdown("##### 📜 Πλήρες Ιστορικό Ενεργειών & Audit Trail (Νεότερα επάνω)")
-            st.markdown(f'<div class="audit-box">{row["description"]}</div>', unsafe_allow_html=True)
+            formatted_history = format_audit_trail(row.get('description', ''))
+            st.markdown(f'<div style="max-height: 380px; overflow-y: auto; padding-right: 5px;">{formatted_history}</div>', unsafe_allow_html=True)
             st.markdown("<br>", unsafe_allow_html=True)
 
             st.markdown("##### 🔄 Φόρμα Ενημέρωσης & Κλεισίματος Βλάβης")
@@ -482,7 +522,6 @@ elif st.session_state.view_mode == "list_tickets":
                 
                 old_desc = str(row['description']) if pd.notnull(row['description']) else ""
                 
-                # ΠΡΟΣΘΗΚΗ ΝΕΟΥ ΣΧΟΛΙΟΥ ΣΤΗΝ ΚΟΡΥΦΗ (ΝΕΟΤΕΡΑ ΕΠΑΝΩ)
                 if new_notes.strip():
                     updated_desc = f"{t_prefix}:\n{new_notes.strip()}\n\n{old_desc}"
                 elif tech_name.strip():
@@ -545,7 +584,6 @@ elif st.session_state.view_mode == "list_tickets":
             st.markdown(f"**Βρέθηκαν {len(display_df)} βλάβες:**")
             st.markdown("---")
 
-            # ΟΜΑΔΟΠΟΙΗΣΗ ΑΝΑ ΗΜΕΡΟΜΗΝΙΑ
             if not display_df.empty:
                 unique_dates = display_df["Ημερομηνία_Str"].unique()
                 for date_val in unique_dates:
