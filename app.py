@@ -267,8 +267,7 @@ if st.session_state.view_mode == "home":
         avg_days = 0.0
         if not closed_df.empty:
             closed_df["c_dt"] = pd.to_datetime(closed_df["created_at"], errors="coerce").dt.tz_localize(None)
-            closed_df["u_dt"] = pd.to_datetime(closed_df.get("updated_at", closed_df["created_at"]), errors="coerce").dt.tz_localize(None)
-            closed_df["dur_days"] = (closed_df["u_dt"] - closed_df["c_dt"]).dt.total_seconds() / 86400.0
+            closed_df["dur_days"] = (datetime.now() - closed_df["c_dt"]).dt.total_seconds() / 86400.0
             avg_days = max(0.0, float(closed_df["dur_days"].mean()))
 
         k1, k2, k3, k4 = st.columns(4)
@@ -371,9 +370,7 @@ elif st.session_state.view_mode == "list_tickets":
             c_dt = pd.to_datetime(row.get('created_at'), errors='coerce')
             if pd.notnull(c_dt):
                 c_dt = c_dt.tz_localize(None)
-                u_dt = pd.to_datetime(row.get('updated_at', datetime.now()), errors='coerce')
-                u_dt = u_dt.tz_localize(None) if pd.notnull(u_dt) else datetime.now()
-                open_days = max(0, (u_dt - c_dt).days)
+                open_days = max(0, (datetime.now() - c_dt).days)
             else:
                 open_days = 0
 
@@ -444,8 +441,7 @@ elif st.session_state.view_mode == "list_tickets":
                         "status": up_status,
                         "resolution_time_hrs": float(up_hours),
                         "materials_used": up_mats,
-                        "description": updated_desc,
-                        "updated_at": datetime.now().isoformat()
+                        "description": updated_desc
                     }
 
                     if up_file is not None:
