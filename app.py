@@ -73,7 +73,7 @@ st.markdown("""
     [data-testid="stMetricLabel"] { color: #94a3b8 !important; font-weight: 600; font-size: 0.9rem; }
     [data-testid="stMetricValue"] { color: #38bdf8 !important; font-weight: 800 !important; font-size: 1.6rem; }
 
-    /* Big Action Buttons */
+    /* Big Action Nav Buttons */
     .big-nav-btn button {
         height: 60px !important;
         font-size: 1.1rem !important;
@@ -118,6 +118,18 @@ st.markdown("""
         font-weight: bold;
         margin-bottom: 20px;
     }
+    
+    .audit-box {
+        background-color: #1e293b;
+        border: 1px solid #475569;
+        padding: 15px;
+        border-radius: 10px;
+        color: #f8fafc;
+        font-family: monospace;
+        white-space: pre-wrap;
+        max-height: 250px;
+        overflow-y: auto;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -133,7 +145,7 @@ def get_b64_img(file):
     return None
 
 # ---------------------------------------------------------
-# 3. DATA RETRIEVAL & KPIs
+# 3. DATA RETRIEVAL & ALL KPIs CALCULATIONS
 # ---------------------------------------------------------
 try:
     tickets_res = supabase.table("tickets").select("*").order("created_at", desc=True).execute()
@@ -141,10 +153,10 @@ try:
 except Exception:
     df_tickets = pd.DataFrame()
 
-HOURLY_RATE = 25.0  # €/ώρα εργασίας
+HOURLY_RATE = 25.0  # €/ώρα εργασίας τεχνικού
 
 if not df_tickets.empty:
-    # Μετατροπή ημερομηνιών & προσθήκη Στηλών Έτους / Μήνα
+    # Μετατροπή Ημερομηνιών
     df_tickets["created_dt"] = pd.to_datetime(df_tickets["created_at"], errors="coerce").dt.tz_localize(None)
     df_tickets["Έτος"] = df_tickets["created_dt"].dt.year.fillna(datetime.now().year).astype(int)
     df_tickets["Μήνας_Num"] = df_tickets["created_dt"].dt.month.fillna(datetime.now().month).astype(int)
@@ -155,6 +167,11 @@ if not df_tickets.empty:
 
     if "resolution_time_hrs" in df_tickets.columns:
         df_tickets["resolution_time_hrs"] = pd.to_numeric(df_tickets["resolution_time_hrs"], errors="coerce").fillna(0.0)
+
+    if "material_cost" in df_tickets.columns:
+        df_tickets["material_cost"] = pd.to_numeric(df_tickets["material_cost"], errors="coerce").fillna(0.0)
+    else:
+        df_tickets["material_cost"] = 0.0
 
 # ---------------------------------------------------------
 # 4. SESSION STATE
@@ -177,7 +194,7 @@ st.markdown("""
                     🛡️ Papastratos (PMI) - Security Maintenance Hub
                 </h1>
                 <p style="margin:4px 0 0 0; color: #38bdf8; font-size: 1.02rem; font-weight: 600;">
-                    Διαχείριση Βλαβών, Ιστορικό, Κόστη & Κατηγοριοποίηση ανά Έτος / Μήνα
+                    Κεντρική Διαχείριση Βλαβών, Πλήρες Ιστορικό, Υπολογισμός Κόστους & Ημερών
                 </p>
             </div>
             <div style="text-align: right; background: rgba(15, 23, 42, 0.8); padding: 8px 16px; border-radius: 12px; border: 1px solid #38bdf8;">
@@ -187,7 +204,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# Εμφάνιση Banner Επιτυχίας στην Αρχική
+# Banner Επιτυχίας στην Αρχική Σελίδα
 if st.session_state.success_msg:
     st.markdown(f'<div class="success-banner">{st.session_state.success_msg}</div>', unsafe_allow_html=True)
     st.session_state.success_msg = None
@@ -223,13 +240,12 @@ with nav_c3:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 7. ΟΘΟΝΗ 1: ΑΡΧΙΚΗ & KPIs ΑΝΑ ΕΤΟΣ / ΜΗΝΑ
+# 7. ΟΘΟΝΗ 1: ΑΡΧΙΚΗ & ΣΥΝΟΛΙΚΑ KPIs (ΚΟΣΤΗ, ΗΜΕΡΕΣ)
 # ---------------------------------------------------------
 if st.session_state.view_mode == "home":
-    st.subheader("📊 Κεντρικός Πίνακας KPIs & Στατιστικά")
+    st.subheader("📊 Κεντρικά Σύνολα, KPIs & Κόστη")
     
     if not df_tickets.empty:
-        # Φίλτρα Έτους & Μήνα
         f_col1, f_col2 = st.columns(2)
         with f_col1:
             years_available = ["Όλα τα Έτη"] + sorted(list(df_tickets["Έτος"].unique()), reverse=True)
@@ -237,29 +253,51 @@ if st.session_state.view_mode == "home":
         with f_col2:
             sel_month = st.selectbox("📆 Επιλογή Μήνα:", ["Όλοι οι Μήνες"] + list(month_names.values()))
 
-        # Φιλτράρισμα DataFrame
         filtered_home_df = df_tickets.copy()
         if sel_year != "Όλα τα Έτη":
             filtered_home_df = filtered_home_df[filtered_home_df["Έτος"] == int(sel_year)]
         if sel_month != "Όλοι οι Μήνες":
             filtered_home_df = filtered_home_df[filtered_home_df["Μήνας"] == sel_month]
 
-        # Υπολογισμός Metrics
+        # Υπολογισμοί KPIs
         tot_tck = len(filtered_home_df)
         op_tck = len(filtered_home_df[filtered_home_df["status"] == "Open"])
+        pend_tck = len(filtered_home_df[filtered_home_df["status"] == "Pending"])
         cl_tck = len(filtered_home_df[filtered_home_df["status"] == "Closed"])
+        
         tot_hrs = float(filtered_home_df["resolution_time_hrs"].sum()) if "resolution_time_hrs" in filtered_home_df.columns else 0.0
-        tot_labor = tot_hrs * HOURLY_RATE
+        tot_labor_cost = tot_hrs * HOURLY_RATE
+        tot_mat_cost = float(filtered_home_df["material_cost"].sum()) if "material_cost" in filtered_home_df.columns else 0.0
+        grand_total_cost = tot_labor_cost + tot_mat_cost
 
-        m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("Σύνολο Βλαβών", tot_tck)
-        m2.metric("🔴 Ανοιχτές", op_tck)
-        m3.metric("🟢 Κλειστές", cl_tck)
-        m4.metric("⏱️ Σύνολο Ωρών", f"{tot_hrs:.1f}h")
-        m5.metric("💰 Κόστος Εργασίας", f"€{tot_labor:,.0f}")
+        # Μέσος Χρόνος Αποκατάστασης σε Ημέρες
+        closed_df = filtered_home_df[filtered_home_df["status"] == "Closed"].copy()
+        avg_days = 0.0
+        if not closed_df.empty:
+            closed_df["c_dt"] = pd.to_datetime(closed_df["created_at"], errors="coerce").dt.tz_localize(None)
+            closed_df["u_dt"] = pd.to_datetime(closed_df.get("updated_at", closed_df["created_at"]), errors="coerce").dt.tz_localize(None)
+            closed_df["dur_days"] = (closed_df["u_dt"] - closed_df["c_dt"]).dt.total_seconds() / 86400.0
+            avg_days = max(0.0, float(closed_df["dur_days"].mean()))
+
+        # Εμφάνιση Καρτών KPIs
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Σύνολο Βλαβών", tot_tck)
+        k2.metric("🔴 Open", op_tck)
+        k3.metric("🟡 Pending", pend_tck)
+        k4.metric("🟢 Closed", cl_tck)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("⏱️ Σύνολο Ωρών", f"{tot_hrs:.1f} hrs")
+        c2.metric("💰 Κόστος Εργασίας (€25/h)", f"€{tot_labor_cost:,.2f}")
+        c3.metric("🛠️ Κόστος Υλικών", f"€{tot_mat_cost:,.2f}")
+        c4.metric("💵 Γενικό Σύνολο (€)", f"€{grand_total_cost:,.2f}")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.metric("📅 Μέσος Χρόνος Αποκατάστασης (MTTR)", f"{avg_days:.1f} ημέρες")
 
         st.markdown("---")
-        st.subheader("📊 Μέσος Χρόνος & Βλάβες ανά Τμήμα")
+        st.subheader("📊 Ανάλυση Βλαβών & Ωρών ανά Τμήμα")
         if "category" in filtered_home_df.columns:
             dept_summary = filtered_home_df.groupby("category").agg(
                 Βλάβες=("ticket_id", "count"),
@@ -289,6 +327,7 @@ elif st.session_state.view_mode == "new_ticket":
             priority = st.selectbox("Προτεραιότητα", ["Low", "Medium", "High", "Critical"])
             status = st.selectbox("Αρχική Κατάσταση", ["Open", "Pending", "Closed"])
             duration_hrs = st.number_input("⏱️ Αρχικές Ώρες Εργασίας (hrs)", min_value=0.0, max_value=100.0, value=1.0, step=0.5)
+            mat_cost_val = st.number_input("🛠️ Εκτιμώμενο Κόστος Υλικών (€)", min_value=0.0, max_value=10000.0, value=0.0, step=10.0)
             materials = st.text_area("🛠️ Περιγραφή Υλικών / Ανταλλακτικών", placeholder="π.χ. 1x PoE Injector, 10m UTP Cat6, 2x RJ45")
 
         description = st.text_area("Περιγραφή Προβλήματος & Ενεργειών", placeholder="Αναλυτική περιγραφή της βλάβης...")
@@ -317,7 +356,8 @@ elif st.session_state.view_mode == "new_ticket":
                 "status": status,
                 "description": f"{creator_prefix}{description}",
                 "materials_used": materials if materials else "Καμία χρήση υλικών",
-                "resolution_time_hrs": float(duration_hrs)
+                "resolution_time_hrs": float(duration_hrs),
+                "material_cost": float(mat_cost_val)
             }
             if photo_b64:
                 insert_payload["photo_url"] = photo_b64
@@ -359,6 +399,9 @@ elif st.session_state.view_mode == "list_tickets":
             else:
                 open_days = 0
 
+            lab_cost = float(row.get('resolution_time_hrs', 0.0) or 0.0) * HOURLY_RATE
+            mat_cost = float(row.get('material_cost', 0.0) or 0.0)
+
             # FULL-WIDTH CARD
             st.markdown(f"""
             <div class="full-card" style="border-left-color: {badge_color};">
@@ -369,14 +412,16 @@ elif st.session_state.view_mode == "list_tickets":
                 <hr style="border-color:#334155; margin:15px 0;">
                 <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
                     <div><b>📍 Περιοχή / Κτίριο:</b> <br><span style="color:#f8fafc; font-size:1.1rem;">{row['building_area']}</span></div>
-                    <div><b>🖥️️ Συσκευή / Asset:</b> <br><span style="color:#f8fafc; font-size:1.1rem;">{row['device_asset']}</span></div>
+                    <div><b>🖥️ Συσκευή / Asset:</b> <br><span style="color:#f8fafc; font-size:1.1rem;">{row['device_asset']}</span></div>
                     <div><b>🚨 Προτεραιότητα:</b> <br><span style="color:#f8fafc; font-size:1.1rem;">{row['priority']}</span></div>
                     <div><b>⏱️ Ώρες Εργασίας:</b> <br><span style="color:#38bdf8; font-size:1.1rem; font-weight:800;">{row.get('resolution_time_hrs', 0.0)} hrs</span></div>
                     <div><b>📅 Ημέρες Ανοιχτή:</b> <br><span style="color:#f59e0b; font-size:1.1rem; font-weight:800;">{open_days} ημέρες</span></div>
-                    <div><b>💰 Κόστος Εργασίας:</b> <br><span style="color:#10b981; font-size:1.1rem; font-weight:800;">€{(float(row.get('resolution_time_hrs', 0.0) or 0.0) * HOURLY_RATE):,.2f}</span></div>
+                    <div><b>💰 Κόστος Εργασίας:</b> <br><span style="color:#10b981; font-size:1.1rem; font-weight:800;">€{lab_cost:,.2f}</span></div>
+                    <div><b>🛠️ Κόστος Υλικών:</b> <br><span style="color:#38bdf8; font-size:1.1rem; font-weight:800;">€{mat_cost:,.2f}</span></div>
+                    <div><b>💵 Σύνολο Βλάβης:</b> <br><span style="color:#10b981; font-size:1.1rem; font-weight:800;">€{(lab_cost + mat_cost):,.2f}</span></div>
                 </div>
                 <hr style="border-color:#334155; margin:15px 0;">
-                <div><b>🛠️ Υλικά & Ανταλλακτικά:</b><br><span style="color:#cbd5e1; font-size:1.05rem;">{row.get('materials_used', 'N/A')}</span></div>
+                <div><b>🛠️ Περιγραφή Υλικών:</b><br><span style="color:#cbd5e1; font-size:1.05rem;">{row.get('materials_used', 'N/A')}</span></div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -389,14 +434,15 @@ elif st.session_state.view_mode == "list_tickets":
                 except Exception:
                     st.info("Δεν ήταν δυνατή η προεπισκόπηση της φωτογραφίας.")
 
-            # Ιστορικό Ενεργειών (Audit Trail)
+            # Ιστορικό Ενεργειών (Audit Trail - Ευανάγνωστο Box)
             st.markdown("##### 📜 Πλήρες Ιστορικό Ενεργειών & Audit Trail")
-            st.text_area("Audit Log History", value=str(row['description']), height=200, disabled=True)
+            st.markdown(f'<div class="audit-box">{row["description"]}</div>', unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
 
             # Φόρμα Ενημέρωσης
             st.markdown("##### 🔄 Φόρμα Ενημέρωσης & Κλεισίματος Βλάβης")
             with st.form(key=f"update_form_{row['ticket_id']}"):
-                u1, u2, u3, u4 = st.columns(4)
+                u1, u2, u3 = st.columns(3)
                 with u1:
                     tech_name = st.text_input("👤 Ονοματεπώνυμο", placeholder="Ονοματεπώνυμο")
                 with u2:
@@ -405,11 +451,15 @@ elif st.session_state.view_mode == "list_tickets":
                     st_options = ["Open", "Pending", "Closed"]
                     curr_st_idx = st_options.index(row['status']) if row['status'] in st_options else 0
                     up_status = st.selectbox("Κατάσταση", st_options, index=curr_st_idx)
-                with u4:
-                    up_hours = st.number_input("⏱️ Σύνολο Ωρών (hrs)", min_value=0.0, max_value=200.0, value=float(row.get('resolution_time_hrs', 0.0) or 0.0), step=0.5)
 
-                up_mats = st.text_area("🛠️ Υλικά / Ανταλλακτικά", value=str(row.get('materials_used', '') or ''))
-                new_notes = st.text_area("✍️ Προσθήκη Νέων Ενεργειών / Σημειώσεων", placeholder="Γράψτε τι διορθώθηκε...")
+                u4, u5 = st.columns(2)
+                with u4:
+                    up_hours = st.number_input("⏱️️ Σύνολο Ωρών (hrs)", min_value=0.0, max_value=200.0, value=float(row.get('resolution_time_hrs', 0.0) or 0.0), step=0.5)
+                with u5:
+                    up_mat_cost = st.number_input("🛠️ Κόστος Υλικών (€)", min_value=0.0, max_value=10000.0, value=float(row.get('material_cost', 0.0) or 0.0), step=10.0)
+
+                up_mats = st.text_area("🛠️ Περιγραφή Υλικών / Ανταλλακτικών", value=str(row.get('materials_used', '') or ''))
+                new_notes = st.text_area("✍️️ Προσθήκη Νέων Ενεργειών / Σημειώσεων", placeholder="Γράψτε τις νέες ενέργειες που πραγματοποιήθηκαν...")
 
                 st.markdown("##### 📸 Προσθήκη Φωτογραφίας (Κάμερα ή Αρχείο)")
                 u_cam_col, u_file_col = st.columns(2)
@@ -422,7 +472,7 @@ elif st.session_state.view_mode == "list_tickets":
                     now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
                     t_prefix = f"[{now_str} - Χρήστης: {tech_name} ({up_role})]" if tech_name.strip() else f"[{now_str} - Ενημέρωση]"
                     
-                    updated_desc = row['description']
+                    updated_desc = str(row['description'])
                     if new_notes.strip():
                         updated_desc += f"\n\n{t_prefix}:\n{new_notes.strip()}"
                     elif tech_name.strip():
@@ -431,8 +481,10 @@ elif st.session_state.view_mode == "list_tickets":
                     payload = {
                         "status": up_status,
                         "resolution_time_hrs": float(up_hours),
+                        "material_cost": float(up_mat_cost),
                         "materials_used": up_mats,
-                        "description": updated_desc
+                        "description": updated_desc,
+                        "updated_at": datetime.now().isoformat()
                     }
 
                     active_up = up_cam if up_cam is not None else up_file
@@ -443,7 +495,8 @@ elif st.session_state.view_mode == "list_tickets":
 
                     try:
                         supabase.table("tickets").update(payload).eq("ticket_id", row['ticket_id']).execute()
-                        st.success(f"✅ Η βλάβη {row['ticket_id']} ενημερώθηκε επιτυχώς!")
+                        st.session_state.success_msg = f"✅ Η βλάβη **{row['ticket_id']}** ενημερώθηκε επιτυχώς!"
+                        st.session_state.view_mode = "home" # Αυτόματη επιστροφή στην Αρχική
                         st.rerun()
                     except Exception as e:
                         st.error(f"⚠️ Σφάλμα ενημέρωσης: {e}")
