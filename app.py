@@ -8,7 +8,7 @@ from supabase import create_client, Client
 # 1. PAGE CONFIG & SUPABASE CONNECTION
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="PMI - Security Maintenance Hub",
+    page_title="PMI - Security Maintenance Hub (DEMO)",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -27,7 +27,7 @@ except Exception:
     st.stop()
 
 # ---------------------------------------------------------
-# 2. MODERN HIGH-CONTRAST MOBILE THEME (CSS)
+# 2. MODERN HIGH-CONTRAST THEME & LIVE PULSE ANIMATION (CSS)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
@@ -53,6 +53,37 @@ st.markdown("""
         margin-bottom: 20px;
         box-shadow: 0 10px 25px -5px rgba(2, 132, 199, 0.3);
     }
+
+    .demo-badge {
+        background-color: #f59e0b;
+        color: #000000;
+        font-weight: 800;
+        font-size: 0.75rem;
+        padding: 3px 8px;
+        border-radius: 6px;
+        letter-spacing: 0.5px;
+        display: inline-block;
+        margin-bottom: 6px;
+    }
+    
+    /* Live Pulse LED Animation */
+    .pulse-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: #10b981;
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+        animation: pulse 1.6s infinite;
+        margin-right: 6px;
+        vertical-align: middle;
+    }
+
+    @keyframes pulse {
+        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+        70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
     
     .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"], .stNumberInput input {
         background-color: #1e293b !important;
@@ -73,7 +104,6 @@ st.markdown("""
     [data-testid="stMetricLabel"] { color: #94a3b8 !important; font-weight: 600; font-size: 0.9rem; }
     [data-testid="stMetricValue"] { color: #38bdf8 !important; font-weight: 800 !important; font-size: 1.6rem; }
 
-    /* Big Action Nav Buttons */
     .big-nav-btn button {
         height: 60px !important;
         font-size: 1.1rem !important;
@@ -102,6 +132,19 @@ st.markdown("""
         width: 100%;
     }
 
+    .date-header {
+        background-color: #1e293b;
+        border: 1px solid #334155;
+        border-left: 4px solid #0284c7;
+        padding: 8px 14px;
+        border-radius: 8px;
+        margin-top: 15px;
+        margin-bottom: 10px;
+        color: #38bdf8;
+        font-weight: 700;
+        font-size: 1rem;
+    }
+
     .success-banner {
         background: rgba(16, 185, 129, 0.2);
         border: 1px solid #10b981;
@@ -126,13 +169,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Μετατροπή Αρχείου Εικόνας σε Base64
 def get_b64_img(file):
     if file is not None:
         try:
             b_data = file.getvalue()
-            if not b_data:
-                return None
+            if not b_data: return None
             encoded = base64.b64encode(b_data).decode()
             mime = getattr(file, 'type', 'image/jpeg') or 'image/jpeg'
             return f"data:{mime};base64,{encoded}"
@@ -141,7 +182,7 @@ def get_b64_img(file):
     return None
 
 # ---------------------------------------------------------
-# 3. DATA RETRIEVAL (FRESH FROM SUPABASE)
+# 3. DATA RETRIEVAL
 # ---------------------------------------------------------
 def fetch_data():
     try:
@@ -151,10 +192,11 @@ def fetch_data():
         return pd.DataFrame()
 
 df_tickets = fetch_data()
-HOURLY_RATE = 25.0  # €/ώρα εργασίας τεχνικού
+HOURLY_RATE = 25.0
 
 if not df_tickets.empty:
     df_tickets["created_dt"] = pd.to_datetime(df_tickets["created_at"], errors="coerce").dt.tz_localize(None)
+    df_tickets["Ημερομηνία_Str"] = df_tickets["created_dt"].dt.strftime('%d/%m/%Y')
     df_tickets["Έτος"] = df_tickets["created_dt"].dt.year.fillna(datetime.now().year).astype(int)
     df_tickets["Μήνας_Num"] = df_tickets["created_dt"].dt.month.fillna(datetime.now().month).astype(int)
     
@@ -168,29 +210,28 @@ if not df_tickets.empty:
 # ---------------------------------------------------------
 # 4. SESSION STATE
 # ---------------------------------------------------------
-if "view_mode" not in st.session_state:
-    st.session_state.view_mode = "home"
-if "active_ticket_id" not in st.session_state:
-    st.session_state.active_ticket_id = None
-if "success_msg" not in st.session_state:
-    st.session_state.success_msg = None
+if "view_mode" not in st.session_state: st.session_state.view_mode = "home"
+if "active_ticket_id" not in st.session_state: st.session_state.active_ticket_id = None
+if "success_msg" not in st.session_state: st.session_state.success_msg = None
 
 # ---------------------------------------------------------
-# 5. HEADER
+# 5. HEADER (WITH LIVE PULSE & DEMO BADGE)
 # ---------------------------------------------------------
 st.markdown("""
     <div class="pmi-header">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
             <div>
+                <span class="demo-badge">🧪 DEMO CONCEPT / PROPOSAL MODE</span>
                 <h1 style="margin:0; font-size: 2.1rem; color: #ffffff !important; font-weight: 800;">
-                    🛡️ Papastratos (PMI) - Security Maintenance Hub
+                    🛡️ Security Maintenance Hub — Papastratos (PMI)
                 </h1>
                 <p style="margin:4px 0 0 0; color: #38bdf8; font-size: 1.02rem; font-weight: 600;">
-                    Κεντρική Διαχείριση Βλαβών, Πλήρες Ιστορικό, Υπολογισμός Κόστους & Ημερών
+                    Πρόταση Συστήματος Διαχείρισης Βλαβών, Ιστορικού & KPIs Συντήρησης
                 </p>
             </div>
-            <div style="text-align: right; background: rgba(15, 23, 42, 0.8); padding: 8px 16px; border-radius: 12px; border: 1px solid #38bdf8;">
-                <span style="color: #10b981; font-weight: 800;">● SYSTEM ACTIVE</span>
+            <div style="text-align: right; background: rgba(15, 23, 42, 0.85); padding: 10px 18px; border-radius: 12px; border: 1px solid #10b981;">
+                <span class="pulse-dot"></span>
+                <span style="color: #10b981; font-weight: 800; font-size: 0.95rem;">SYSTEM ACTIVE (LIVE)</span>
             </div>
         </div>
     </div>
@@ -234,8 +275,57 @@ st.markdown("<br>", unsafe_allow_html=True)
 # 7. ΟΘΟΝΗ 1: ΑΡΧΙΚΗ & ΣΥΝΟΛΙΚΑ KPIs
 # ---------------------------------------------------------
 if st.session_state.view_mode == "home":
-    st.subheader("📊 Κεντρικά Σύνολα, KPIs & Κόστη")
+    st.subheader("📊 Κεντρικά Σύνολα, KPIs & Κόστη (Demo Overview)")
     
+    # Κουμπί προετοιμασίας καθαρού Demo
+    with st.expander("🛠️ Ρυθμίσεις Προετοιμασίας Demo (Καθαρισμός Δεδομένων)"):
+        st.write("Πατήστε το παρακάτω κουμπί για να αφήσετε **ακριβώς 2 ανοιχτές βλάβες (Open/Pending) και 1 ολοκληρωμένη (Closed)** για την αυριανή παρουσίαση:")
+        if st.button("🧹 Προετοιμασία 3 Καθαρότερων Demo Βλαβών"):
+            try:
+                # Διαγραφή παλιών & εισαγωγή 3 καθαρών
+                supabase.table("tickets").delete().neq("ticket_id", "KEEP_NONE").execute()
+                
+                demo_data = [
+                    {
+                        "ticket_id": f"TCK-{datetime.now().strftime('%m%d')}-01",
+                        "category": "CCTV (Κάμερες)",
+                        "building_area": "BLD8 - Είσοδος Τουρνικέ DR_116",
+                        "device_asset": "Cam 20 - Wisenet Multi-Sensor",
+                        "priority": "High",
+                        "status": "Open",
+                        "description": f"[{datetime.now().strftime('%d/%m/%Y %H:%M')} - Καταχώρηση: Ανέστης Θεοδωρίδης [Security Systems Admin]]\nΑπώλεια σήματος βίντεο στην κάμερα εισόδου. Έλεγχος PoE Switch.",
+                        "materials_used": "1x PoE Injector Cat6",
+                        "resolution_time_hrs": 1.5
+                    },
+                    {
+                        "ticket_id": f"TCK-{datetime.now().strftime('%m%d')}-02",
+                        "category": "ACS (Access Control / Τουρνικέ)",
+                        "building_area": "Κεντρική Πύλη - Πύλη Οχημάτων",
+                        "device_asset": "Reader CR.08L0.01.01",
+                        "priority": "Critical",
+                        "status": "Pending",
+                        "description": f"[{datetime.now().strftime('%d/%m/%Y %H:%M')} - Καταχώρηση: Ανέστης Θεοδωρίδης [Technical Expert]]\nΔεν αναγνωρίζει κάρτες πρόσβασης. Αναμονή ανταλλακτικού ελεγκτή LenelS2.",
+                        "materials_used": "Αναμονή Lenel LNL-1320",
+                        "resolution_time_hrs": 2.0
+                    },
+                    {
+                        "ticket_id": f"TCK-{datetime.now().strftime('%m%d')}-03",
+                        "category": "Fire Alarm (Πυρανίχνευση)",
+                        "building_area": "BLD3 - Αποθήκη Υλικών",
+                        "device_asset": "Smoke Detector SD-104",
+                        "priority": "Medium",
+                        "status": "Closed",
+                        "description": f"[{datetime.now().strftime('%d/%m/%Y %H:%M')} - Καταχώρηση: Ανέστης Θεοδωρίδης [Security Systems Admin]]\nΨευδής συναγερμός λόγω σκόνης. Πραγματοποιήθηκε καθαρισμός οπτικού θαλάμου.",
+                        "materials_used": "Σπρέι καθαρισμού επαφών",
+                        "resolution_time_hrs": 1.0
+                    }
+                ]
+                supabase.table("tickets").insert(demo_data).execute()
+                st.success("✅ Η βάση προετοιμάστηκε με επιτυχία με 3 καθαρές βλάβες!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"⚠️ Σφάλμα καθαρισμού: {e}")
+
     if not df_tickets.empty:
         f_col1, f_col2 = st.columns(2)
         with f_col1:
@@ -298,7 +388,7 @@ elif st.session_state.view_mode == "new_ticket":
         f1, f2 = st.columns(2)
         with f1:
             tck_id = st.text_input("Κωδικός Ticket", value=f"TCK-{datetime.now().strftime('%m%d-%H%M')}")
-            creator_tech = st.text_input("👤 Ονοματεπώνυμο Χρήστη / Τεχνικού", placeholder="π.χ. Ανέστης Θεοδωρίδης")
+            creator_tech = st.text_input("👤 Ονοματεπώνυμο Χρήστη / Τεχνικού", value="Ανέστης Θεοδωρίδης")
             user_role = st.selectbox("🎭 Ρόλος / Ειδικότητα", ["Security Systems Admin", "Technical Expert", "G4S Security Officer", "Shift Supervisor", "External Contractor"])
             category = st.selectbox("Τμήμα / Κατηγορία", ["CCTV (Κάμερες)", "ACS (Access Control / Τουρνικέ)", "Fire Alarm (Πυρανίχνευση)", "Network / PoE / Fiber", "Άλλο"])
             building_area = st.text_input("Κτίριο / Περιοχή", placeholder="π.χ. BLD8 - Είσοδος Τουρνικέ DR_116")
@@ -345,7 +435,7 @@ elif st.session_state.view_mode == "new_ticket":
                 st.error(f"⚠️ Σφάλμα καταχώρησης: {e}")
 
 # ---------------------------------------------------------
-# 9. ΟΘΟΝΗ 3: ΛΙΣΤΑ ΒΛΑΒΩΝ & FULL-WIDTH DETAIL VIEW
+# 9. ΟΘΟΝΗ 3: ΛΙΣΤΑ ΒΛΑΒΩΝ ΑΝΑ ΗΜΕΡΟΜΗΝΙΑ & DETAILS
 # ---------------------------------------------------------
 elif st.session_state.view_mode == "list_tickets":
     
@@ -407,7 +497,7 @@ elif st.session_state.view_mode == "list_tickets":
             
             u1, u2, u3 = st.columns(3)
             with u1:
-                tech_name = st.text_input("👤 Ονοματεπώνυμο", placeholder="Ονοματεπώνυμο")
+                tech_name = st.text_input("👤 Ονοματεπώνυμο", value="Ανέστης Θεοδωρίδης")
             with u2:
                 up_role = st.selectbox("🎭 Ρόλος", ["Security Systems Admin", "Technical Expert", "G4S Security Officer", "Shift Supervisor", "External Contractor"])
             with u3:
@@ -426,7 +516,6 @@ elif st.session_state.view_mode == "list_tickets":
                 now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
                 t_prefix = f"[{now_str} - Χρήστης: {tech_name} ({up_role})]" if tech_name.strip() else f"[{now_str} - Ενημέρωση]"
                 
-                # Προσθήκη νέου ιστορικού στο παλιό
                 old_desc = str(row['description']) if pd.notnull(row['description']) else ""
                 if new_notes.strip():
                     updated_desc = f"{old_desc}\n\n{t_prefix}:\n{new_notes.strip()}"
@@ -455,13 +544,14 @@ elif st.session_state.view_mode == "list_tickets":
                 except Exception as e:
                     st.error(f"⚠️ Σφάλμα ενημέρωσης: {e}")
 
+    # ΑΝ ΔΕΝ ΕΧΕΙ ΕΠΙΛΕΓΕΙ ΒΛΑΒΗ -> ΕΜΦΑΝΙΖΕΤΑΙ Η ΛΙΣΤΑ ΟΜΑΔΟΠΟΙΗΜΕΝΗ ΑΝΑ ΗΜΕΡΟΜΗΝΙΑ
     else:
-        st.subheader("📋 Λίστα Όλων των Βλαβών (Πατήστε σε μια βλάβη για ανάλυση)")
+        st.subheader("📋 Λίστα Βλαβών Ομαδοποιημένη ανά Ημερομηνία")
         
         if not df_tickets.empty:
             c1, c2, c3 = st.columns(3)
             with c1:
-                status_filter = st.selectbox("Κατάσταση:", ["Όλες οι Βλάβες", "🔴 Ανοιχτές (Open & Pending)", "🟢 Ολοκληρωμένες (Closed)"])
+                status_filter = st.selectbox("Κατάσταση:", ["Όλες οι Καταστάσεις", "🔴 Open", "🟡 Pending", "🟢 Closed"])
             with c2:
                 years_list = ["Όλα τα Έτη"] + sorted(list(df_tickets["Έτος"].unique()), reverse=True)
                 year_filter = st.selectbox("Έτος:", years_list)
@@ -469,9 +559,11 @@ elif st.session_state.view_mode == "list_tickets":
                 search_txt = st.text_input("🔍 Αναζήτηση:", placeholder="Κωδικός, περιοχή, συσκευή...")
 
             display_df = df_tickets.copy()
-            if status_filter == "🔴 Ανοιχτές (Open & Pending)":
-                display_df = display_df[display_df["status"] != "Closed"]
-            elif status_filter == "🟢 Ολοκληρωμένες (Closed)":
+            if status_filter == "🔴 Open":
+                display_df = display_df[display_df["status"] == "Open"]
+            elif status_filter == "🟡 Pending":
+                display_df = display_df[display_df["status"] == "Pending"]
+            elif status_filter == "🟢 Closed":
                 display_df = display_df[display_df["status"] == "Closed"]
 
             if year_filter != "Όλα τα Έτη":
@@ -487,12 +579,21 @@ elif st.session_state.view_mode == "list_tickets":
             st.markdown(f"**Βρέθηκαν {len(display_df)} βλάβες:**")
             st.markdown("---")
 
-            for _, row in display_df.iterrows():
-                badge_icon = "🔴" if row['status'] == "Open" else ("🟡" if row['status'] == "Pending" else "🟢")
-                btn_label = f"{badge_icon} [{row['status']}] {row['ticket_id']} — {row['building_area']} ({row['category']})"
-                
-                if st.button(btn_label, key=f"btn_{row['ticket_id']}"):
-                    st.session_state.active_ticket_id = row['ticket_id']
-                    st.rerun()
+            # ΟΜΑΔΟΠΟΙΗΣΗ ΑΝΑ ΗΜΕΡΟΜΗΝΙΑ
+            if not display_df.empty:
+                unique_dates = display_df["Ημερομηνία_Str"].unique()
+                for date_val in unique_dates:
+                    st.markdown(f'<div class="date-header">📅 {date_val}</div>', unsafe_allow_html=True)
+                    date_group = display_df[display_df["Ημερομηνία_Str"] == date_val]
+                    
+                    for _, row in date_group.iterrows():
+                        badge_icon = "🔴" if row['status'] == "Open" else ("🟡" if row['status'] == "Pending" else "🟢")
+                        btn_label = f"{badge_icon} [{row['status']}] {row['ticket_id']} — {row['building_area']} ({row['category']})"
+                        
+                        if st.button(btn_label, key=f"btn_{row['ticket_id']}"):
+                            st.session_state.active_ticket_id = row['ticket_id']
+                            st.rerun()
+            else:
+                st.info("Δεν βρέθηκαν βλάβες με τα επιλεγμένα φίλτρα.")
         else:
             st.info("Δεν υπάρχουν καταχωρημένες βλάβες στη βάση.")
