@@ -133,12 +133,17 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Διορθωμένη συνάρτηση για υποστήριξη και της Κάμερας (Camera Input Buffer)
 def get_b64_img(file):
     if file is not None:
         try:
             b_data = file.getvalue()
+            if not b_data:
+                return None
             encoded = base64.b64encode(b_data).decode()
-            mime = getattr(file, 'type', 'image/jpeg') or 'image/jpeg'
+            mime = getattr(file, 'type', None)
+            if not mime or mime == '':
+                mime = 'image/jpeg'
             return f"data:{mime};base64,{encoded}"
         except Exception:
             return None
@@ -156,7 +161,6 @@ except Exception:
 HOURLY_RATE = 25.0  # €/ώρα εργασίας τεχνικού
 
 if not df_tickets.empty:
-    # Μετατροπή Ημερομηνιών
     df_tickets["created_dt"] = pd.to_datetime(df_tickets["created_at"], errors="coerce").dt.tz_localize(None)
     df_tickets["Έτος"] = df_tickets["created_dt"].dt.year.fillna(datetime.now().year).astype(int)
     df_tickets["Μήνας_Num"] = df_tickets["created_dt"].dt.month.fillna(datetime.now().month).astype(int)
@@ -204,7 +208,6 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# Banner Επιτυχίας στην Αρχική Σελίδα
 if st.session_state.success_msg:
     st.markdown(f'<div class="success-banner">{st.session_state.success_msg}</div>', unsafe_allow_html=True)
     st.session_state.success_msg = None
@@ -240,7 +243,7 @@ with nav_c3:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 7. ΟΘΟΝΗ 1: ΑΡΧΙΚΗ & ΣΥΝΟΛΙΚΑ KPIs (ΚΟΣΤΗ, ΗΜΕΡΕΣ)
+# 7. ΟΘΟΝΗ 1: ΑΡΧΙΚΗ & ΣΥΝΟΛΙΚΑ KPIs
 # ---------------------------------------------------------
 if st.session_state.view_mode == "home":
     st.subheader("📊 Κεντρικά Σύνολα, KPIs & Κόστη")
@@ -259,7 +262,6 @@ if st.session_state.view_mode == "home":
         if sel_month != "Όλοι οι Μήνες":
             filtered_home_df = filtered_home_df[filtered_home_df["Μήνας"] == sel_month]
 
-        # Υπολογισμοί KPIs
         tot_tck = len(filtered_home_df)
         op_tck = len(filtered_home_df[filtered_home_df["status"] == "Open"])
         pend_tck = len(filtered_home_df[filtered_home_df["status"] == "Pending"])
@@ -270,7 +272,6 @@ if st.session_state.view_mode == "home":
         tot_mat_cost = float(filtered_home_df["material_cost"].sum()) if "material_cost" in filtered_home_df.columns else 0.0
         grand_total_cost = tot_labor_cost + tot_mat_cost
 
-        # Μέσος Χρόνος Αποκατάστασης σε Ημέρες
         closed_df = filtered_home_df[filtered_home_df["status"] == "Closed"].copy()
         avg_days = 0.0
         if not closed_df.empty:
@@ -279,7 +280,6 @@ if st.session_state.view_mode == "home":
             closed_df["dur_days"] = (closed_df["u_dt"] - closed_df["c_dt"]).dt.total_seconds() / 86400.0
             avg_days = max(0.0, float(closed_df["dur_days"].mean()))
 
-        # Εμφάνιση Καρτών KPIs
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("Σύνολο Βλαβών", tot_tck)
         k2.metric("🔴 Open", op_tck)
@@ -365,7 +365,7 @@ elif st.session_state.view_mode == "new_ticket":
             try:
                 supabase.table("tickets").insert(insert_payload).execute()
                 st.session_state.success_msg = f"✅ Η βλάβη **{tck_id}** καταχωρήθηκε επιτυχώς!"
-                st.session_state.view_mode = "home" # Αυτόματη επιστροφή στην Αρχική
+                st.session_state.view_mode = "home"
                 st.rerun()
             except Exception as e:
                 st.error(f"⚠️ Σφάλμα καταχώρησης: {e}")
@@ -375,7 +375,6 @@ elif st.session_state.view_mode == "new_ticket":
 # ---------------------------------------------------------
 elif st.session_state.view_mode == "list_tickets":
     
-    # ΑΝ ΕΧΕΙ ΕΠΙΛΕΓΕΙ ΒΛΑΒΗ -> FULL WIDTH VIEW
     if st.session_state.active_ticket_id and not df_tickets.empty:
         selected_row = df_tickets[df_tickets["ticket_id"] == st.session_state.active_ticket_id]
         
@@ -389,7 +388,6 @@ elif st.session_state.view_mode == "list_tickets":
             st.markdown("<br>", unsafe_allow_html=True)
             badge_color = "#ef4444" if row['status'] == "Open" else ("#f59e0b" if row['status'] == "Pending" else "#10b981")
             
-            # Υπολογισμός Ημερών
             c_dt = pd.to_datetime(row.get('created_at'), errors='coerce')
             if pd.notnull(c_dt):
                 c_dt = c_dt.tz_localize(None)
@@ -402,7 +400,6 @@ elif st.session_state.view_mode == "list_tickets":
             lab_cost = float(row.get('resolution_time_hrs', 0.0) or 0.0) * HOURLY_RATE
             mat_cost = float(row.get('material_cost', 0.0) or 0.0)
 
-            # FULL-WIDTH CARD
             st.markdown(f"""
             <div class="full-card" style="border-left-color: {badge_color};">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
@@ -425,7 +422,6 @@ elif st.session_state.view_mode == "list_tickets":
             </div>
             """, unsafe_allow_html=True)
 
-            # Φωτογραφία
             photo_val = row.get('photo_url', None)
             if photo_val and str(photo_val).strip():
                 st.markdown("##### 📸 Φωτογραφία Βλάβης")
@@ -434,12 +430,10 @@ elif st.session_state.view_mode == "list_tickets":
                 except Exception:
                     st.info("Δεν ήταν δυνατή η προεπισκόπηση της φωτογραφίας.")
 
-            # Ιστορικό Ενεργειών (Audit Trail - Ευανάγνωστο Box)
             st.markdown("##### 📜 Πλήρες Ιστορικό Ενεργειών & Audit Trail")
             st.markdown(f'<div class="audit-box">{row["description"]}</div>', unsafe_allow_html=True)
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # Φόρμα Ενημέρωσης
             st.markdown("##### 🔄 Φόρμα Ενημέρωσης & Κλεισίματος Βλάβης")
             with st.form(key=f"update_form_{row['ticket_id']}"):
                 u1, u2, u3 = st.columns(3)
@@ -454,12 +448,12 @@ elif st.session_state.view_mode == "list_tickets":
 
                 u4, u5 = st.columns(2)
                 with u4:
-                    up_hours = st.number_input("⏱️️ Σύνολο Ωρών (hrs)", min_value=0.0, max_value=200.0, value=float(row.get('resolution_time_hrs', 0.0) or 0.0), step=0.5)
+                    up_hours = st.number_input("⏱️ Σύνολο Ωρών (hrs)", min_value=0.0, max_value=200.0, value=float(row.get('resolution_time_hrs', 0.0) or 0.0), step=0.5)
                 with u5:
                     up_mat_cost = st.number_input("🛠️ Κόστος Υλικών (€)", min_value=0.0, max_value=10000.0, value=float(row.get('material_cost', 0.0) or 0.0), step=10.0)
 
                 up_mats = st.text_area("🛠️ Περιγραφή Υλικών / Ανταλλακτικών", value=str(row.get('materials_used', '') or ''))
-                new_notes = st.text_area("✍️️ Προσθήκη Νέων Ενεργειών / Σημειώσεων", placeholder="Γράψτε τις νέες ενέργειες που πραγματοποιήθηκαν...")
+                new_notes = st.text_area("✍️ Προσθήκη Νέων Ενεργειών / Σημειώσεων", placeholder="Γράψτε τις νέες ενέργειες που πραγματοποιήθηκαν...")
 
                 st.markdown("##### 📸 Προσθήκη Φωτογραφίας (Κάμερα ή Αρχείο)")
                 u_cam_col, u_file_col = st.columns(2)
@@ -496,12 +490,11 @@ elif st.session_state.view_mode == "list_tickets":
                     try:
                         supabase.table("tickets").update(payload).eq("ticket_id", row['ticket_id']).execute()
                         st.session_state.success_msg = f"✅ Η βλάβη **{row['ticket_id']}** ενημερώθηκε επιτυχώς!"
-                        st.session_state.view_mode = "home" # Αυτόματη επιστροφή στην Αρχική
+                        st.session_state.view_mode = "home"
                         st.rerun()
                     except Exception as e:
                         st.error(f"⚠️ Σφάλμα ενημέρωσης: {e}")
 
-    # ΑΝ ΔΕΝ ΕΧΕΙ ΕΠΙΛΕΓΕΙ ΒΛΑΒΗ -> ΕΜΦΑΝΙΖΕΤΑΙ Η ΛΙΣΤΑ
     else:
         st.subheader("📋 Λίστα Όλων των Βλαβών (Πατήστε σε μια βλάβη για ανάλυση)")
         
