@@ -133,7 +133,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Διορθωμένη συνάρτηση για υποστήριξη και της Κάμερας (Camera Input Buffer)
+# Μετατροπή Αρχείου Εικόνας σε Base64
 def get_b64_img(file):
     if file is not None:
         try:
@@ -141,9 +141,7 @@ def get_b64_img(file):
             if not b_data:
                 return None
             encoded = base64.b64encode(b_data).decode()
-            mime = getattr(file, 'type', None)
-            if not mime or mime == '':
-                mime = 'image/jpeg'
+            mime = getattr(file, 'type', 'image/jpeg') or 'image/jpeg'
             return f"data:{mime};base64,{encoded}"
         except Exception:
             return None
@@ -171,11 +169,6 @@ if not df_tickets.empty:
 
     if "resolution_time_hrs" in df_tickets.columns:
         df_tickets["resolution_time_hrs"] = pd.to_numeric(df_tickets["resolution_time_hrs"], errors="coerce").fillna(0.0)
-
-    if "material_cost" in df_tickets.columns:
-        df_tickets["material_cost"] = pd.to_numeric(df_tickets["material_cost"], errors="coerce").fillna(0.0)
-    else:
-        df_tickets["material_cost"] = 0.0
 
 # ---------------------------------------------------------
 # 4. SESSION STATE
@@ -269,8 +262,6 @@ if st.session_state.view_mode == "home":
         
         tot_hrs = float(filtered_home_df["resolution_time_hrs"].sum()) if "resolution_time_hrs" in filtered_home_df.columns else 0.0
         tot_labor_cost = tot_hrs * HOURLY_RATE
-        tot_mat_cost = float(filtered_home_df["material_cost"].sum()) if "material_cost" in filtered_home_df.columns else 0.0
-        grand_total_cost = tot_labor_cost + tot_mat_cost
 
         closed_df = filtered_home_df[filtered_home_df["status"] == "Closed"].copy()
         avg_days = 0.0
@@ -287,14 +278,10 @@ if st.session_state.view_mode == "home":
         k4.metric("🟢 Closed", cl_tck)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("⏱️ Σύνολο Ωρών", f"{tot_hrs:.1f} hrs")
-        c2.metric("💰 Κόστος Εργασίας (€25/h)", f"€{tot_labor_cost:,.2f}")
-        c3.metric("🛠️ Κόστος Υλικών", f"€{tot_mat_cost:,.2f}")
-        c4.metric("💵 Γενικό Σύνολο (€)", f"€{grand_total_cost:,.2f}")
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.metric("📅 Μέσος Χρόνος Αποκατάστασης (MTTR)", f"{avg_days:.1f} ημέρες")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("⏱️ Σύνολο Ωρών Εργασίας", f"{tot_hrs:.1f} hrs")
+        c2.metric("💰 Σύνολο Κόστους Εργασίας (€25/h)", f"€{tot_labor_cost:,.2f}")
+        c3.metric("📅 Μέσος Χρόνος Αποκατάστασης (MTTR)", f"{avg_days:.1f} ημέρες")
 
         st.markdown("---")
         st.subheader("📊 Ανάλυση Βλαβών & Ωρών ανά Τμήμα")
@@ -327,21 +314,15 @@ elif st.session_state.view_mode == "new_ticket":
             priority = st.selectbox("Προτεραιότητα", ["Low", "Medium", "High", "Critical"])
             status = st.selectbox("Αρχική Κατάσταση", ["Open", "Pending", "Closed"])
             duration_hrs = st.number_input("⏱️ Αρχικές Ώρες Εργασίας (hrs)", min_value=0.0, max_value=100.0, value=1.0, step=0.5)
-            mat_cost_val = st.number_input("🛠️ Εκτιμώμενο Κόστος Υλικών (€)", min_value=0.0, max_value=10000.0, value=0.0, step=10.0)
             materials = st.text_area("🛠️ Περιγραφή Υλικών / Ανταλλακτικών", placeholder="π.χ. 1x PoE Injector, 10m UTP Cat6, 2x RJ45")
 
         description = st.text_area("Περιγραφή Προβλήματος & Ενεργειών", placeholder="Αναλυτική περιγραφή της βλάβης...")
 
-        st.markdown("##### 📸 Φωτογραφία Βλάβης (Προαιρετικό)")
-        cam_col, file_col = st.columns(2)
-        with cam_col:
-            cam_photo = st.camera_input("📷 Λήψη από Κάμερα")
-        with file_col:
-            upload_photo = st.file_uploader("📁 Επιλογή Αρχείου Εικόνας", type=["jpg", "jpeg", "png"])
+        st.markdown("##### 📁 Επιλογή Αρχείου Φωτογραφίας (Προαιρετικό)")
+        upload_photo = st.file_uploader("Μεταφόρτωση Εικόνας", type=["jpg", "jpeg", "png"])
 
         if st.form_submit_button("💾 Αποθήκευση Βλάβης στη Βάση"):
-            active_photo = cam_photo if cam_photo is not None else upload_photo
-            photo_b64 = get_b64_img(active_photo)
+            photo_b64 = get_b64_img(upload_photo)
             
             now_stamp = datetime.now().strftime('%d/%m/%Y %H:%M')
             role_str = f"[{user_role}]" if user_role else ""
@@ -356,8 +337,7 @@ elif st.session_state.view_mode == "new_ticket":
                 "status": status,
                 "description": f"{creator_prefix}{description}",
                 "materials_used": materials if materials else "Καμία χρήση υλικών",
-                "resolution_time_hrs": float(duration_hrs),
-                "material_cost": float(mat_cost_val)
+                "resolution_time_hrs": float(duration_hrs)
             }
             if photo_b64:
                 insert_payload["photo_url"] = photo_b64
@@ -398,7 +378,6 @@ elif st.session_state.view_mode == "list_tickets":
                 open_days = 0
 
             lab_cost = float(row.get('resolution_time_hrs', 0.0) or 0.0) * HOURLY_RATE
-            mat_cost = float(row.get('material_cost', 0.0) or 0.0)
 
             st.markdown(f"""
             <div class="full-card" style="border-left-color: {badge_color};">
@@ -414,8 +393,6 @@ elif st.session_state.view_mode == "list_tickets":
                     <div><b>⏱️ Ώρες Εργασίας:</b> <br><span style="color:#38bdf8; font-size:1.1rem; font-weight:800;">{row.get('resolution_time_hrs', 0.0)} hrs</span></div>
                     <div><b>📅 Ημέρες Ανοιχτή:</b> <br><span style="color:#f59e0b; font-size:1.1rem; font-weight:800;">{open_days} ημέρες</span></div>
                     <div><b>💰 Κόστος Εργασίας:</b> <br><span style="color:#10b981; font-size:1.1rem; font-weight:800;">€{lab_cost:,.2f}</span></div>
-                    <div><b>🛠️ Κόστος Υλικών:</b> <br><span style="color:#38bdf8; font-size:1.1rem; font-weight:800;">€{mat_cost:,.2f}</span></div>
-                    <div><b>💵 Σύνολο Βλάβης:</b> <br><span style="color:#10b981; font-size:1.1rem; font-weight:800;">€{(lab_cost + mat_cost):,.2f}</span></div>
                 </div>
                 <hr style="border-color:#334155; margin:15px 0;">
                 <div><b>🛠️ Περιγραφή Υλικών:</b><br><span style="color:#cbd5e1; font-size:1.05rem;">{row.get('materials_used', 'N/A')}</span></div>
@@ -446,21 +423,12 @@ elif st.session_state.view_mode == "list_tickets":
                     curr_st_idx = st_options.index(row['status']) if row['status'] in st_options else 0
                     up_status = st.selectbox("Κατάσταση", st_options, index=curr_st_idx)
 
-                u4, u5 = st.columns(2)
-                with u4:
-                    up_hours = st.number_input("⏱️ Σύνολο Ωρών (hrs)", min_value=0.0, max_value=200.0, value=float(row.get('resolution_time_hrs', 0.0) or 0.0), step=0.5)
-                with u5:
-                    up_mat_cost = st.number_input("🛠️ Κόστος Υλικών (€)", min_value=0.0, max_value=10000.0, value=float(row.get('material_cost', 0.0) or 0.0), step=10.0)
-
+                up_hours = st.number_input("⏱️ Σύνολο Ωρών (hrs)", min_value=0.0, max_value=200.0, value=float(row.get('resolution_time_hrs', 0.0) or 0.0), step=0.5)
                 up_mats = st.text_area("🛠️ Περιγραφή Υλικών / Ανταλλακτικών", value=str(row.get('materials_used', '') or ''))
                 new_notes = st.text_area("✍️ Προσθήκη Νέων Ενεργειών / Σημειώσεων", placeholder="Γράψτε τις νέες ενέργειες που πραγματοποιήθηκαν...")
 
-                st.markdown("##### 📸 Προσθήκη Φωτογραφίας (Κάμερα ή Αρχείο)")
-                u_cam_col, u_file_col = st.columns(2)
-                with u_cam_col:
-                    up_cam = st.camera_input("📷 Νέα Λήψη από Κάμερα")
-                with u_file_col:
-                    up_file = st.file_uploader("📁 Νέο Αρχείο Εικόνας", type=["jpg", "jpeg", "png"])
+                st.markdown("##### 📁 Προσθήκη / Αλλαγή Αρχείου Εικόνας")
+                up_file = st.file_uploader("Νέο Αρχείο Εικόνας", type=["jpg", "jpeg", "png"])
 
                 if st.form_submit_button("💾 Αποθήκευση Ενημέρωσης στη Βάση"):
                     now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
@@ -475,15 +443,13 @@ elif st.session_state.view_mode == "list_tickets":
                     payload = {
                         "status": up_status,
                         "resolution_time_hrs": float(up_hours),
-                        "material_cost": float(up_mat_cost),
                         "materials_used": up_mats,
                         "description": updated_desc,
                         "updated_at": datetime.now().isoformat()
                     }
 
-                    active_up = up_cam if up_cam is not None else up_file
-                    if active_up is not None:
-                        new_b64 = get_b64_img(active_up)
+                    if up_file is not None:
+                        new_b64 = get_b64_img(up_file)
                         if new_b64:
                             payload["photo_url"] = new_b64
 
