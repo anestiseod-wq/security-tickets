@@ -27,7 +27,7 @@ except Exception:
     st.stop()
 
 # ---------------------------------------------------------
-# 2. FULL-WIDTH THEME (CSS)
+# 2. FULL-WIDTH HIGH CONTRAST STABLE THEME (CSS)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
@@ -101,7 +101,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Helper: Ασφαλής επεξεργασία εικόνας
 def get_b64_img(file):
     if file is not None:
         try:
@@ -145,10 +144,10 @@ st.markdown("""
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
             <div>
                 <h1 style="margin:0; font-size: 2.1rem; color: #ffffff !important; font-weight: 800;">
-                    🛡️ Papastratos (PMI) - Security Systems & Maintenance
+                    🛡️ Papastratos (PMI) - Security Maintenance Hub
                 </h1>
                 <p style="margin:4px 0 0 0; color: #38bdf8; font-size: 1.02rem; font-weight: 600;">
-                    Πλήρης Ανατομία Βλαβών, Υπολογισμός Κόστους, Ωρών & Ιστορικού
+                    Διαχείριση Βλαβών, Ρόλοι, Ημέρες Αποκατάστασης, Ώρες & Ιστορικό
                 </p>
             </div>
             <div style="text-align: right; background: rgba(15, 23, 42, 0.8); padding: 8px 16px; border-radius: 12px; border: 1px solid #38bdf8;">
@@ -169,11 +168,11 @@ k6.metric("💰 Σύνολο Κόστους", f"€{total_labor_cost:,.0f}")
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 5. TABS
+# 5. TABS (ΜΟΝΟ 2 ΤΑΒS: 1. Νέα Βλάβη, 2. Λίστα & Ανάλυση Βλαβών)
 # ---------------------------------------------------------
-tab1, tab2, tab3 = st.tabs(["📝 1. Καταχώρηση Νέας Βλάβης", "📋 2. Λίστα Βλαβών & Αναλυτική Προβολή", "📊 3. Αναλυτικά Σύνολα & KPIs"])
+tab1, tab2 = st.tabs(["📝 1. Καταχώρηση Νέας Βλάβης", "📋 2. Λίστα Βλαβών (Πατήστε σε Βλάβη για Ανάλυση)"])
 
-# TAB 1: NEW TICKET
+# TAB 1: NEW TICKET FORM
 with tab1:
     st.subheader("📝 Νέα Αναφορά Βλάβης / Συντήρησης")
     
@@ -181,12 +180,13 @@ with tab1:
         f1, f2 = st.columns(2)
         with f1:
             tck_id = st.text_input("Κωδικός Ticket", value=f"TCK-{datetime.now().strftime('%m%d-%H%M')}")
-            creator_tech = st.text_input("👤 Τεχνικός / Χειριστής Καταχώρησης", placeholder="π.χ. Ανέστης Θεοδωρίδης")
+            creator_tech = st.text_input("👤 Ονοματεπώνυμο Χρήστη", placeholder="π.χ. Ανέστης Θεοδωρίδης")
+            user_role = st.selectbox("🎭 Ρόλος Χρήστη", ["Security Systems Admin", "Technical Expert", "G4S Security Officer", "Shift Supervisor", "External Contractor"])
             category = st.selectbox("Κατηγορία Συστήματος", ["CCTV (Κάμερες)", "ACS (Access Control / Τουρνικέ)", "Fire Alarm (Πυρανίχνευση)", "Network / PoE / Fiber", "Άλλο"])
             building_area = st.text_input("Κτίριο / Περιοχή", placeholder="π.χ. BLD8 - Είσοδος Τουρνικέ DR_116")
-            device_asset = st.text_input("Συσκευή / Asset ID", placeholder="π.χ. Cam 20 / Reader CR.08L0.01.01")
 
         with f2:
+            device_asset = st.text_input("Συσκευή / Asset ID", placeholder="π.χ. Cam 20 / Reader CR.08L0.01.01")
             priority = st.selectbox("Προτεραιότητα", ["Low", "Medium", "High", "Critical"])
             status = st.selectbox("Αρχική Κατάσταση", ["Open", "Pending", "Closed"])
             duration_hrs = st.number_input("⏱️ Αρχικές Ώρες Εργασίας (hrs)", min_value=0.0, max_value=100.0, value=1.0, step=0.5)
@@ -205,7 +205,8 @@ with tab1:
             active_photo = cam_photo if cam_photo is not None else upload_photo
             photo_b64 = get_b64_img(active_photo)
             
-            creator_prefix = f"[Καταχώρηση: {creator_tech}]\n" if creator_tech.strip() else ""
+            role_str = f"[{user_role}]" if user_role else ""
+            creator_prefix = f"[Καταχώρηση: {creator_tech} {role_str}]\n" if creator_tech.strip() else ""
             
             insert_payload = {
                 "ticket_id": tck_id,
@@ -228,12 +229,12 @@ with tab1:
             except Exception as e:
                 st.error(f"⚠️ Σφάλμα καταχώρησης: {e}")
 
-# TAB 2: CLICKABLE LIST & FULL-WIDTH DETAIL VIEW
+# TAB 2: CLICKABLE LIST & FULL-WIDTH DETAIL ANALYSIS
 with tab2:
     if "active_ticket_id" not in st.session_state:
         st.session_state.active_ticket_id = None
 
-    # ΑΝ ΕΧΕΙ ΕΠΙΛΕΓΕΙ ΒΛΑΒΗ -> ΠΡΟΒΟΛΗ ΑΝΑΛΥΤΙΚΑ ΣΕ ΟΛΗ ΤΗΝ ΟΘΟΝΗ
+    # ΑΝ ΕΧΕΙ ΕΠΙΛΕΓΕΙ ΒΛΑΒΗ -> ΕΜΦΑΝΙΖΕΤΑΙ Η ΑΝΑΛΥΣΗ ΣΕ ΟΛΗ ΤΗΝ ΟΘΟΝΗ
     if st.session_state.active_ticket_id and not df_tickets.empty:
         selected_row = df_tickets[df_tickets["ticket_id"] == st.session_state.active_ticket_id]
         
@@ -247,7 +248,15 @@ with tab2:
             st.markdown("<br>", unsafe_allow_html=True)
             badge_color = "#ef4444" if row['status'] == "Open" else ("#f59e0b" if row['status'] == "Pending" else "#10b981")
             
-            # Full-Width Box
+            # Υπολογισμός Ημερών που παραμένει/παρέμεινε ανοιχτή
+            created_dt = pd.to_datetime(row.get('created_at'), errors='coerce')
+            if pd.notnull(created_dt):
+                now_dt = datetime.now() if row['status'] != 'Closed' else pd.to_datetime(row.get('updated_at', datetime.now()), errors='coerce')
+                open_days = max(0, (now_dt.tz_localize(None) - created_dt.tz_localize(None)).days)
+            else:
+                open_days = 0
+
+            # FULL-WIDTH CARD
             st.markdown(f"""
             <div class="full-card" style="border-left-color: {badge_color};">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
@@ -255,11 +264,12 @@ with tab2:
                     <span style="background:{badge_color}; color:#ffffff; padding:6px 16px; border-radius:8px; font-weight:800; font-size:1.1rem;">{row['status']}</span>
                 </div>
                 <hr style="border-color:#334155; margin:15px 0;">
-                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px;">
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
                     <div><b>📍 Περιοχή / Κτίριο:</b> <br><span style="color:#f8fafc; font-size:1.1rem;">{row['building_area']}</span></div>
                     <div><b>🖥️ Συσκευή / Asset:</b> <br><span style="color:#f8fafc; font-size:1.1rem;">{row['device_asset']}</span></div>
                     <div><b>🚨 Προτεραιότητα:</b> <br><span style="color:#f8fafc; font-size:1.1rem;">{row['priority']}</span></div>
-                    <div><b>⏱️️ Ώρες Εργασίας:</b> <br><span style="color:#38bdf8; font-size:1.1rem; font-weight:800;">{row.get('resolution_time_hrs', 0.0)} hrs</span></div>
+                    <div><b>⏱️ Ώρες Εργασίας:</b> <br><span style="color:#38bdf8; font-size:1.1rem; font-weight:800;">{row.get('resolution_time_hrs', 0.0)} hrs</span></div>
+                    <div><b>📅 Ημέρες Ανοιχτή:</b> <br><span style="color:#f59e0b; font-size:1.1rem; font-weight:800;">{open_days} ημέρες</span></div>
                     <div><b>💰 Κόστος Εργασίας:</b> <br><span style="color:#10b981; font-size:1.1rem; font-weight:800;">€{(float(row.get('resolution_time_hrs', 0.0) or 0.0) * HOURLY_RATE):,.2f}</span></div>
                 </div>
                 <hr style="border-color:#334155; margin:15px 0;">
@@ -276,24 +286,26 @@ with tab2:
                 except Exception:
                     st.info("Δεν ήταν δυνατή η προεπισκόπηση της φωτογραφίας.")
 
-            # Ιστορικό
+            # Ιστορικό Ενεργειών (Audit Trail)
             st.markdown("##### 📜 Πλήρες Ιστορικό Ενεργειών & Audit Trail")
             st.text_area("Audit History Log", value=str(row['description']), height=180, disabled=True)
 
             # Φόρμα Ενημέρωσης
             st.markdown("##### 🔄 Φόρμα Ενημέρωσης & Κλεισίματος Βλάβης")
             with st.form(key=f"update_form_{row['ticket_id']}"):
-                u1, u2, u3 = st.columns(3)
+                u1, u2, u3, u4 = st.columns(4)
                 with u1:
-                    tech_name = st.text_input("👤 Τεχνικός / Χειριστής", placeholder="Ονοματεπώνυμο")
+                    tech_name = st.text_input("👤 Ονοματεπώνυμο", placeholder="Ονοματεπώνυμο")
                 with u2:
+                    up_role = st.selectbox("🎭 Ρόλος", ["Security Systems Admin", "Technical Expert", "G4S Security Officer", "Shift Supervisor", "External Contractor"])
+                with u3:
                     st_options = ["Open", "Pending", "Closed"]
                     curr_st_idx = st_options.index(row['status']) if row['status'] in st_options else 0
                     up_status = st.selectbox("Κατάσταση", st_options, index=curr_st_idx)
-                with u3:
-                    up_hours = st.number_input("⏱️ Σύνολο Ωρών Εργασίας (hrs)", min_value=0.0, max_value=200.0, value=float(row.get('resolution_time_hrs', 0.0) or 0.0), step=0.5)
+                with u4:
+                    up_hours = st.number_input("⏱️ Σύνολο Ωρών (hrs)", min_value=0.0, max_value=200.0, value=float(row.get('resolution_time_hrs', 0.0) or 0.0), step=0.5)
 
-                up_mats = st.text_area("🛠️️ Υλικά / Ανταλλακτικά", value=str(row.get('materials_used', '') or ''))
+                up_mats = st.text_area("🛠️ Υλικά / Ανταλλακτικά", value=str(row.get('materials_used', '') or ''))
                 new_notes = st.text_area("✍️ Προσθήκη Νέων Ενεργειών / Σημειώσεων", placeholder="Γράψτε τι διορθώθηκε...")
 
                 st.markdown("##### 📸 Προσθήκη Φωτογραφίας (Κάμερα ή Αρχείο)")
@@ -305,7 +317,7 @@ with tab2:
 
                 if st.form_submit_button("💾 Αποθήκευση Ενημέρωσης στη Βάση"):
                     now_str = datetime.now().strftime('%d/%m %H:%M')
-                    t_prefix = f" [Τεχνικός: {tech_name}]" if tech_name.strip() else ""
+                    t_prefix = f" [Χρήστης: {tech_name} ({up_role})]" if tech_name.strip() else ""
                     
                     updated_desc = row['description']
                     if new_notes.strip():
@@ -369,17 +381,3 @@ with tab2:
                     st.rerun()
         else:
             st.info("Δεν υπάρχουν καταχωρημένες βλάβες στη βάση.")
-
-# TAB 3: FULL ANALYTICS
-with tab3:
-    st.subheader("📊 Αναλυτικά Σύνολα, Κόστη & KPIs")
-    if not df_tickets.empty:
-        c_cost1, c_cost2 = st.columns(2)
-        c_cost1.metric("⏱️ Συνολικές Ώρες Εργασίας", f"{total_hours:.1f} hrs")
-        c_cost2.metric("💰 Εκτιμώμενο Κόστος Εργασίας (€25/h)", f"€{total_labor_cost:,.2f}")
-        
-        st.markdown("---")
-        st.markdown("##### 📋 Πλήρης Πίνακας Ιστορικού Βλαβών")
-        st.dataframe(df_tickets, use_container_width=True, hide_index=True)
-    else:
-        st.info("Δεν υπάρχει διαθέσιμο ιστορικό.")
