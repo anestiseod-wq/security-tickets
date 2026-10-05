@@ -27,7 +27,7 @@ except Exception:
     st.stop()
 
 # ---------------------------------------------------------
-# 2. MODERN HIGH-CONTRAST INDUSTRIAL THEME (CSS)
+# 2. MODERN HIGH-CONTRAST THEME (CSS)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
@@ -46,7 +46,6 @@ st.markdown("""
         box-shadow: 0 10px 25px -5px rgba(2, 132, 199, 0.3);
     }
     
-    /* Input Fields & Text Areas */
     .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"], .stNumberInput input {
         background-color: #1e293b !important;
         color: #ffffff !important;
@@ -62,7 +61,6 @@ st.markdown("""
         margin-bottom: 4px !important;
     }
 
-    /* Metric Dashboard Cards */
     [data-testid="stMetric"] {
         background: #1e293b;
         border: 1px solid #334155;
@@ -71,9 +69,8 @@ st.markdown("""
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
     }
     [data-testid="stMetricLabel"] { color: #94a3b8 !important; font-weight: 600; }
-    [data-testid="stMetricValue"] { color: #38bdf8 !important; font-weight: 800 !important; font-size: 1.7rem; }
+    [data-testid="stMetricValue"] { color: #38bdf8 !important; font-weight: 800 !important; font-size: 1.6rem; }
 
-    /* Action Buttons */
     .stButton>button {
         width: 100%;
         background: linear-gradient(90deg, #0284c7 0%, #0369a1 100%) !important;
@@ -85,21 +82,7 @@ st.markdown("""
         padding: 10px 18px !important;
         text-shadow: 0 1px 2px rgba(0,0,0,0.5);
     }
-    
-    .stButton>button:hover {
-        background: linear-gradient(90deg, #0369a1 0%, #075985 100%) !important;
-        border-color: #7dd3fc !important;
-    }
 
-    /* Expander / Accordion Styling */
-    .streamlit-expanderHeader {
-        background-color: #1e293b !important;
-        color: #ffffff !important;
-        border-radius: 10px !important;
-        border: 1px solid #334155 !important;
-        font-weight: 700 !important;
-    }
-    
     div[data-testid="stForm"] { 
         background-color: #1e293b; 
         border: 1px solid #334155; 
@@ -109,34 +92,20 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Helper: Μετατροπή Εικόνας σε Base64 για Απευθείας Ασφαλή Προβολή
-def file_to_base64(uploaded_file):
-    if uploaded_file is not None:
-        bytes_data = uploaded_file.getvalue()
-        base64_str = base64.b64encode(bytes_data).decode()
-        mime_type = uploaded_file.type if hasattr(uploaded_file, 'type') else 'image/jpeg'
-        return f"data:{mime_type};base64,{base64_str}"
-    return None
-
-# Helper: Upload στο Supabase Storage (με fallback)
-def save_photo(file, ticket_id):
-    if file is not None:
+# Helper: Μετατροπή Εικόνας Κάμερας/Αρχείου σε Base64
+def process_image(img_file):
+    if img_file is not None:
         try:
-            b64_img = file_to_base64(file)
-            file_ext = file.name.split('.')[-1] if hasattr(file, 'name') and file.name else 'jpg'
-            file_path = f"{ticket_id}_{datetime.now().strftime('%M%S')}.{file_ext}"
-            
-            supabase.storage.from_("ticket-photos").upload(
-                file_path, file.getvalue(), file_options={"content-type": f"image/{file_ext}"}
-            )
-            pub_url = supabase.storage.from_("ticket-photos").get_public_url(file_path)
-            return pub_url if pub_url else b64_img
+            bytes_data = img_file.getvalue()
+            b64_str = base64.b64encode(bytes_data).decode()
+            mime_type = getattr(img_file, 'type', 'image/jpeg') or 'image/jpeg'
+            return f"data:{mime_type};base64,{b64_str}"
         except Exception:
-            return file_to_base64(file)
+            return None
     return None
 
 # ---------------------------------------------------------
-# 3. DATA RETRIEVAL
+# 3. DATA RETRIEVAL & METRICS CALCULATIONS
 # ---------------------------------------------------------
 try:
     tickets_res = supabase.table("tickets").select("*").order("created_at", desc=True).execute()
@@ -144,49 +113,72 @@ try:
 except Exception:
     df_tickets = pd.DataFrame()
 
+# Υπολογισμοί Συνόλων & KPIs
+HOURLY_RATE = 25.0  # Εκτιμώμενο κόστος εργασίας τεχνικού ανά ώρα (€/h)
+
+total_tck = len(df_tickets)
+open_tck = len(df_tickets[df_tickets["status"] == "Open"]) if not df_tickets.empty else 0
+pending_tck = len(df_tickets[df_tickets["status"] == "Pending"]) if not df_tickets.empty else 0
+closed_tck = len(df_tickets[df_tickets["status"] == "Closed"]) if not df_tickets.empty else 0
+
+total_hours = 0.0
+total_labor_cost = 0.0
+avg_days_to_close = 0.0
+
+if not df_tickets.empty:
+    if "resolution_time_hrs" in df_tickets.columns:
+        df_tickets["resolution_time_hrs"] = pd.to_numeric(df_tickets["resolution_time_hrs"], errors="coerce").fillna(0.0)
+        total_hours = float(df_tickets["resolution_time_hrs"].sum())
+        total_labor_cost = total_hours * HOURLY_RATE
+
+    # Υπολογισμός Ημερών Αποκατάστασης (MTTR)
+    if "created_at" in df_tickets.columns:
+        df_tickets["created_dt"] = pd.to_datetime(df_tickets["created_at"], errors="coerce")
+        df_tickets["updated_dt"] = pd.to_datetime(df_tickets.get("updated_at", df_tickets["created_at"]), errors="coerce")
+        
+        closed_df = df_tickets[df_tickets["status"] == "Closed"].copy()
+        if not closed_df.empty:
+            closed_df["duration_days"] = (closed_df["updated_dt"] - closed_df["created_dt"]).dt.total_seconds() / 86400.0
+            avg_days_to_close = float(closed_df["duration_days"].mean())
+
 # ---------------------------------------------------------
-# 4. HEADER & KPIs
+# 4. HEADER & DASHBOARD METRICS
 # ---------------------------------------------------------
 st.markdown("""
     <div class="pmi-header">
-        <div style="display: flex; justify- justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
             <div>
                 <h1 style="margin:0; font-size: 2.1rem; color: #ffffff !important; font-weight: 800;">
                     🛡️ Papastratos (PMI) - Security Systems & Maintenance
                 </h1>
                 <p style="margin:4px 0 0 0; color: #38bdf8; font-size: 1.02rem; font-weight: 600;">
-                    Διαδραστικός Πίνακας Βλαβών, Τεχνικών, Υλικών & Φωτογραφιών
+                    Διαχειριστικό Πάνελ Βλαβών, Υπολογισμός Κόστους, Ωρών, Κάμερας & Ιστορικού
                 </p>
             </div>
             <div style="text-align: right; background: rgba(15, 23, 42, 0.8); padding: 8px 16px; border-radius: 12px; border: 1px solid #38bdf8;">
-                <span style="color: #10b981; font-weight: 800;">● SYSTEM ACTIVE</span>
+                <span style="color: #10b981; font-weight: 800;">● SYSTEM OPERATIONAL</span>
             </div>
         </div>
     </div>
 """, unsafe_allow_html=True)
 
-# KPIs
-total_tck = len(df_tickets)
-open_tck = len(df_tickets[df_tickets["status"] == "Open"]) if not df_tickets.empty else 0
-pending_tck = len(df_tickets[df_tickets["status"] == "Pending"]) if not df_tickets.empty else 0
-closed_tck = len(df_tickets[df_tickets["status"] == "Closed"]) if not df_tickets.empty else 0
-total_hours = df_tickets["resolution_time_hrs"].sum() if not df_tickets.empty and "resolution_time_hrs" in df_tickets.columns else 0.0
-
-k1, k2, k3, k4, k5 = st.columns(5)
-k1.metric("Σύνολο", total_tck)
-k2.metric("🔴 Open", open_tck)
-k3.metric("🟡 Pending", pending_tck)
-k4.metric("🟢 Closed", closed_tck)
-k5.metric("⏱️ Ώρες", f"{total_hours:.1f}h")
+# KPIs Bar
+k1, k2, k3, k4, k5, k6 = st.columns(6)
+k1.metric("Σύνολο Βλαβών", total_tck)
+k2.metric("🔴 Ανοιχτές", open_tck)
+k3.metric("🟡 Εκκρεμείς", pending_tck)
+k4.metric("🟢 Κλειστές", closed_tck)
+k5.metric("⏱️ Σύνολο Ωρών", f"{total_hours:.1f}h")
+k6.metric("📅 Μ.Ο. Ημερών", f"{avg_days_to_close:.1f} μέρες")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # 5. TABS
 # ---------------------------------------------------------
-tab1, tab2, tab3 = st.tabs(["📝 1. Καταχώρηση Νέας Βλάβης", "📋 2. Κάρτες Βλαβών & Ενημέρωση", "📊 3. Αναλυτικό Ιστορικό"])
+tab1, tab2, tab3 = st.tabs(["📝 1. Καταχώρηση Νέας Βλάβης (με Κάμερα)", "📋 2. Διαχείριση, Κάρτες & Ιστορικό", "📊 3. Αναλυτικά Σύνολα, Κόστη & KPIs"])
 
-# TAB 1: NEW TICKET FORM
+# TAB 1: NEW TICKET WITH CAMERA
 with tab1:
     st.subheader("📝 Νέα Αναφορά Βλάβης / Συντήρησης")
     
@@ -205,13 +197,19 @@ with tab1:
             duration_hrs = st.number_input("⏱️ Αρχικές Ώρες Εργασίας (hrs)", min_value=0.0, max_value=100.0, value=1.0, step=0.5)
             materials = st.text_area("🛠️ Υλικά / Ανταλλακτικά", placeholder="π.χ. 1x PoE Injector, 10m UTP Cat6, 2x RJ45")
 
-        description = st.text_area("Περιγραφή Προβλήματος & Ενεργειών", placeholder="Αναλυτική περιγραφή...")
+        description = st.text_area("Περιγραφή Προβλήματος & Ενεργειών", placeholder="Αναλυτική περιγραφή της βλάβης...")
         
-        st.markdown("##### 📸 Φωτογραφία Βλάβης")
-        img_file = st.file_uploader("Επιλέξτε ή τραβήξτε φωτογραφία", type=["jpg", "jpeg", "png"], key="new_img")
+        st.markdown("##### 📸 Λήψη Φωτογραφίας (Κάμερα Κινητού/PC) ή Μεταφόρτωση Αρχείου")
+        cam_col, file_col = st.columns(2)
+        with cam_col:
+            cam_photo = st.camera_input("📷 Λήψη από Κάμερα")
+        with file_col:
+            upload_photo = st.file_uploader("📁 Επιλογή Αρχείου Εικόνας", type=["jpg", "jpeg", "png"])
 
         if st.form_submit_button("➕ Καταχώρηση Νέας Βλάβης στη Βάση"):
-            photo_data = save_photo(img_file, tck_id)
+            active_photo = cam_photo if cam_photo is not None else upload_photo
+            photo_b64 = process_image(active_photo)
+            
             creator_prefix = f"[Καταχώρηση: {creator_tech}]\n" if creator_tech.strip() else ""
             
             insert_payload = {
@@ -225,23 +223,23 @@ with tab1:
                 "materials_used": materials if materials else "Καμία χρήση υλικών",
                 "resolution_time_hrs": float(duration_hrs)
             }
-            if photo_data:
-                insert_payload["photo_url"] = photo_data
+            if photo_b64:
+                insert_payload["photo_url"] = photo_b64
                 
             supabase.table("tickets").insert(insert_payload).execute()
             st.success(f"✅ Η βλάβη **{tck_id}** καταχωρήθηκε επιτυχώς!")
             st.rerun()
 
-# TAB 2: INTERACTIVE CARDS & DIRECT EDIT
+# TAB 2: INTERACTIVE CARDS & AUDIT HISTORY
 with tab2:
-    st.subheader("📋 Διαδραστικός Πίνακας Βλαβών (Click-to-Open Cards)")
+    st.subheader("📋 Πίνακας Βλαβών & Ιστορικό Ενεργειών (Ανοιχτές & Κλειστές)")
     
     if not df_tickets.empty:
         c_filter, c_search = st.columns([1, 2])
         with c_filter:
-            status_filter = st.selectbox("Φιλτράρισμα:", ["Όλες οι Βλάβες", "🔴 Ανοιχτές (Open & Pending)", "🟢 Ολοκληρωμένες (Closed)"])
+            status_filter = st.selectbox("Φιλτράρισμα Κατάστασης:", ["Όλες οι Βλάβες", "🔴 Ανοιχτές (Open & Pending)", "🟢 Ολοκληρωμένες (Closed)"])
         with c_search:
-            search_txt = st.text_input("🔍 Αναζήτηση σε όλες τις βλάβες:", placeholder="Αναζήτηση με κωδικό, κτίριο, συσκευή...")
+            search_txt = st.text_input("🔍 Αναζήτηση σε όλες τις βλάβες:", placeholder="Αναζήτηση κωδικού, περιοχής, τεχνικού, υλικών...")
 
         display_cards = df_tickets.copy()
         if status_filter == "🔴 Ανοιχτές (Open & Pending)":
@@ -257,7 +255,7 @@ with tab2:
                 display_cards["description"].str.contains(search_txt, case=False, na=False)
             ]
 
-        st.markdown(f"**Βρέθηκαν {len(display_cards)} βλάβες. Πατήστε πάνω σε οποιαδήποτε κάρτα για προβολή & επεξεργασία:**")
+        st.markdown(f"**Βρέθηκαν {len(display_cards)} βλάβες:**")
         st.markdown("---")
 
         for idx, row in display_cards.iterrows():
@@ -267,33 +265,31 @@ with tab2:
             with st.expander(card_title, expanded=False):
                 col_info, col_edit = st.columns([1, 1], gap="medium")
                 
-                # ΑΡΙΣΤΕΡΗ ΣΤΗΛΗ: Πληροφορίες & Φωτογραφία
                 with col_info:
-                    st.markdown("##### 📌 Στοιχεία Βλάβης")
+                    st.markdown("##### 📌 Στοιχεία & Ιστορικό Κινήσεων")
                     st.write(f"**Κωδικός:** `{row['ticket_id']}`")
                     st.write(f"**Περιοχή / Κτίριο:** {row['building_area']}")
                     st.write(f"**Συσκευή:** {row['device_asset']}")
                     st.write(f"**Προτεραιότητα:** {row['priority']}")
-                    st.write(f"**Καταγεγραμμένες Ώρες:** {row.get('resolution_time_hrs', 0.0)} hrs")
+                    st.write(f"**Ώρες Αποκατάστασης:** {row.get('resolution_time_hrs', 0.0)} hrs")
                     st.write(f"**Υλικά που Χρησιμοποιήθηκαν:** {row.get('materials_used', 'N/A')}")
-                    st.markdown(f"**Ιστορικό / Περιγραφή:**\n```text\n{row['description']}\n```")
                     
-                    # Προβολή Φωτογραφίας
+                    st.markdown("**📜 Πλήρες Ιστορικό Ενεργειών:**")
+                    st.text_area("Audit Trail", value=str(row['description']), height=150, disabled=True, key=f"hist_{row['ticket_id']}")
+                    
+                    # Φωτογραφία
                     photo_val = row.get('photo_url', None)
                     if photo_val and str(photo_val).strip():
                         st.markdown("##### 📸 Φωτογραφία Βλάβης")
                         try:
                             st.image(photo_val, use_column_width=True)
-                            if str(photo_val).startswith("http"):
-                                st.markdown(f"[🔗 Άνοιγμα Εικόνας σε Νέο Παράθυρο / Download]({photo_val})")
                         except Exception:
-                            st.warning("⚠️ Δεν ήταν δυνατή η φόρτωση της προεπισκόπησης της εικόνας.")
+                            st.warning("⚠️ Δεν ήταν δυνατή η φόρτωση της προεπισκόπησης της φωτογραφίας.")
                     else:
-                        st.info("ℹ️ Δεν υπάρχει καταχωρημένη φωτογραφία.")
+                        st.info("ℹ️ Δεν έχει καταχωρηθεί φωτογραφία.")
 
-                # ΔΕΞΙΑ ΣΤΗΛΗ: Φόρμα Άμεσης Ενημέρωσης
                 with col_edit:
-                    st.markdown("##### 🔄 Ενημέρωση & Κλείσιμο")
+                    st.markdown("##### 🔄 Ενημέρωση Βλάβης & Νέα Φωτογραφία")
                     with st.form(key=f"form_update_{row['ticket_id']}"):
                         tech_name = st.text_input("👤 Τεχνικός / Χειριστής", placeholder="Ονοματεπώνυμο", key=f"tech_{row['ticket_id']}")
                         
@@ -305,11 +301,13 @@ with tab2:
                         
                         up_mats = st.text_area("🛠️ Υλικά / Ανταλλακτικά", value=str(row.get('materials_used', '') or ''), key=f"mat_{row['ticket_id']}")
                         
-                        new_notes = st.text_area("✍️ Νέες Ενέργειες", placeholder="Γράψτε τι διορθώθηκε...", key=f"notes_{row['ticket_id']}")
+                        new_notes = st.text_area("✍️ Προσθήκη Νέων Ενεργειών", placeholder="Γράψτε τι διορθώθηκε...", key=f"notes_{row['ticket_id']}")
                         
-                        up_file = st.file_uploader("📸 Προσθήκη / Αλλαγή Φωτογραφίας", type=["jpg", "jpeg", "png"], key=f"img_{row['ticket_id']}")
+                        st.markdown("##### 📸 Νέα Λήψη από Κάμερα ή Αρχείο")
+                        u_cam = st.camera_input("📷 Λήψη Φωτογραφίας", key=f"cam_{row['ticket_id']}")
+                        u_file = st.file_uploader("📁 Μεταφόρτωση Αρχείου", type=["jpg", "jpeg", "png"], key=f"img_{row['ticket_id']}")
 
-                        if st.form_submit_button("💾 Αποθήκευση Αλλαγών"):
+                        if st.form_submit_button("💾 Αποθήκευση Ενημέρωσης"):
                             now_str = datetime.now().strftime('%d/%m %H:%M')
                             t_prefix = f" [Τεχνικός: {tech_name}]" if tech_name.strip() else ""
                             
@@ -323,24 +321,33 @@ with tab2:
                                 "status": up_status,
                                 "resolution_time_hrs": float(up_hours),
                                 "materials_used": up_mats,
-                                "description": updated_desc
+                                "description": updated_desc,
+                                "updated_at": datetime.now().isoformat()
                             }
                             
-                            if up_file:
-                                new_photo_data = save_photo(up_file, row['ticket_id'])
-                                if new_photo_data:
-                                    payload["photo_url"] = new_photo_data
+                            active_up = u_cam if u_cam is not None else u_file
+                            if active_up is not None:
+                                new_b64 = process_image(active_up)
+                                if new_b64:
+                                    payload["photo_url"] = new_b64
 
                             supabase.table("tickets").update(payload).eq("ticket_id", row['ticket_id']).execute()
-                            st.success(f"✅ Η βλάβη {row['ticket_id']} ενημερώθηκε!")
+                            st.success(f"✅ Η βλάβη {row['ticket_id']} ενημερώθηκε επιτυχώς!")
                             st.rerun()
     else:
         st.info("Δεν βρέθηκαν καταχωρημένες βλάβες.")
 
-# TAB 3: FULL HISTORY & EXPORT
+# TAB 3: FULL ANALYTICS & TOTAL COSTS
 with tab3:
-    st.subheader("📊 Πλήρης Πίνακας & Εξαγωγή Δεδομένων")
+    st.subheader("📊 Αναλυτικά Σύνολα, Κόστη Εργασίας & KPIs")
     if not df_tickets.empty:
+        c_cost1, c_cost2, c_cost3 = st.columns(3)
+        c_cost1.metric("⏱️ Συνολικές Ώρες Εργασίας", f"{total_hours:.1f} hrs")
+        c_cost2.metric("💰 Εκτιμώμενο Κόστος Εργασίας (€25/h)", f"€{total_labor_cost:,.2f}")
+        c_cost3.metric("📅 Μέσος Χρόνος Αποκατάστασης", f"{avg_days_to_close:.1f} ημέρες")
+        
+        st.markdown("---")
+        st.markdown("##### 📋 Πλήρης Πίνακας Ιστορικού Βλαβών")
         st.dataframe(df_tickets, use_container_width=True, hide_index=True)
     else:
         st.info("Δεν υπάρχει διαθέσιμο ιστορικό.")
