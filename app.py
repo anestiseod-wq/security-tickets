@@ -431,6 +431,7 @@ elif st.session_state.view_mode == "list_tickets":
                     now_str = datetime.now().strftime('%d/%m/%Y %H:%M')
                     t_prefix = f"[{now_str} - Χρήστης: {tech_name} ({up_role})]" if tech_name.strip() else f"[{now_str} - Ενημέρωση]"
                     
+                    # ΔΙΑΤΗΡΗΣΗ ΠΑΛΙΟΥ ΙΣΤΟΡΙΚΟΥ + ΠΡΟΣΘΗΚΗ ΝΕΩΝ ΣΗΜΕΙΩΣΕΩΝ
                     updated_desc = str(row['description'])
                     if new_notes.strip():
                         updated_desc += f"\n\n{t_prefix}:\n{new_notes.strip()}"
