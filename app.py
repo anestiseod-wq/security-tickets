@@ -27,15 +27,15 @@ except Exception:
     st.stop()
 
 # ---------------------------------------------------------
-# 2. FULL-WIDTH HIGH CONTRAST STABLE THEME (CSS)
+# 2. MODERN HIGH-CONTRAST MOBILE-FRIENDLY THEME (CSS)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
     .block-container {
         padding-top: 1.2rem !important;
         padding-bottom: 2rem !important;
-        padding-left: 1.5rem !important;
-        padding-right: 1.5rem !important;
+        padding-left: 1.2rem !important;
+        padding-right: 1.2rem !important;
         max-width: 100% !important;
     }
     
@@ -47,10 +47,11 @@ st.markdown("""
     
     .pmi-header {
         background: linear-gradient(135deg, #1e293b 0%, #0f172a 60%, #0284c7 100%);
-        padding: 20px 24px;
-        border-radius: 14px;
+        padding: 22px 26px;
+        border-radius: 16px;
         border: 1px solid #38bdf8;
         margin-bottom: 20px;
+        box-shadow: 0 10px 25px -5px rgba(2, 132, 199, 0.3);
     }
     
     .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"], .stNumberInput input {
@@ -65,11 +66,20 @@ st.markdown("""
     [data-testid="stMetric"] {
         background: #1e293b;
         border: 1px solid #334155;
-        padding: 14px; 
-        border-radius: 12px;
+        padding: 16px; 
+        border-radius: 14px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
     }
-    [data-testid="stMetricLabel"] { color: #94a3b8 !important; font-weight: 600; }
+    [data-testid="stMetricLabel"] { color: #94a3b8 !important; font-weight: 600; font-size: 0.9rem; }
     [data-testid="stMetricValue"] { color: #38bdf8 !important; font-weight: 800 !important; font-size: 1.6rem; }
+
+    /* Big Action Buttons */
+    .big-nav-btn button {
+        height: 65px !important;
+        font-size: 1.15rem !important;
+        font-weight: 800 !important;
+        border-radius: 12px !important;
+    }
 
     .stButton>button {
         width: 100%;
@@ -85,8 +95,8 @@ st.markdown("""
     div[data-testid="stForm"] { 
         background-color: #1e293b; 
         border: 1px solid #334155; 
-        padding: 22px; 
-        border-radius: 14px; 
+        padding: 24px; 
+        border-radius: 16px; 
     }
     
     .full-card {
@@ -97,6 +107,15 @@ st.markdown("""
         border-radius: 14px;
         margin-bottom: 20px;
         width: 100%;
+    }
+
+    .success-alert-box {
+        background: rgba(16, 185, 129, 0.15);
+        border: 1px solid #10b981;
+        padding: 18px;
+        border-radius: 12px;
+        color: #6ee7b7;
+        margin-bottom: 20px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -113,7 +132,7 @@ def get_b64_img(file):
     return None
 
 # ---------------------------------------------------------
-# 3. DATA RETRIEVAL & KPIs
+# 3. DATA RETRIEVAL & ALL KPIs CALCULATIONS
 # ---------------------------------------------------------
 try:
     tickets_res = supabase.table("tickets").select("*").order("created_at", desc=True).execute()
@@ -121,7 +140,7 @@ try:
 except Exception:
     df_tickets = pd.DataFrame()
 
-HOURLY_RATE = 25.0
+HOURLY_RATE = 25.0  # €/ώρα εργασίας τεχνικού
 
 total_tck = len(df_tickets)
 open_tck = len(df_tickets[df_tickets["status"] == "Open"]) if not df_tickets.empty else 0
@@ -130,14 +149,41 @@ closed_tck = len(df_tickets[df_tickets["status"] == "Closed"]) if not df_tickets
 
 total_hours = 0.0
 total_labor_cost = 0.0
+total_mat_cost = 0.0
+total_cost = 0.0
+avg_days_to_close = 0.0
 
-if not df_tickets.empty and "resolution_time_hrs" in df_tickets.columns:
-    df_tickets["resolution_time_hrs"] = pd.to_numeric(df_tickets["resolution_time_hrs"], errors="coerce").fillna(0.0)
-    total_hours = float(df_tickets["resolution_time_hrs"].sum())
-    total_labor_cost = total_hours * HOURLY_RATE
+if not df_tickets.empty:
+    # Ώρες & Κόστος Εργασίας
+    if "resolution_time_hrs" in df_tickets.columns:
+        df_tickets["resolution_time_hrs"] = pd.to_numeric(df_tickets["resolution_time_hrs"], errors="coerce").fillna(0.0)
+        total_hours = float(df_tickets["resolution_time_hrs"].sum())
+        total_labor_cost = total_hours * HOURLY_RATE
+
+    # Κόστος Υλικών (αν υπάρχει στήλη material_cost)
+    if "material_cost" in df_tickets.columns:
+        df_tickets["material_cost"] = pd.to_numeric(df_tickets["material_cost"], errors="coerce").fillna(0.0)
+        total_mat_cost = float(df_tickets["material_cost"].sum())
+    
+    total_cost = total_labor_cost + total_mat_cost
+
+    # Υπολογισμός Μέσου Χρόνου Αποκατάστασης (MTTR)
+    if "created_at" in df_tickets.columns:
+        df_tickets["created_dt"] = pd.to_datetime(df_tickets["created_at"], errors="coerce").dt.tz_localize(None)
+        
+        # Αν υπάρχει updated_at χρησιμοποιούμε αυτό, αλλιώς created_at
+        if "updated_at" in df_tickets.columns:
+            df_tickets["updated_dt"] = pd.to_datetime(df_tickets["updated_at"], errors="coerce").dt.tz_localize(None)
+        else:
+            df_tickets["updated_dt"] = df_tickets["created_dt"]
+
+        closed_df = df_tickets[df_tickets["status"] == "Closed"].copy()
+        if not closed_df.empty:
+            closed_df["duration_days"] = (closed_df["updated_dt"] - closed_df["created_dt"]).dt.total_seconds() / 86400.0
+            avg_days_to_close = max(0.0, float(closed_df["duration_days"].mean()))
 
 # ---------------------------------------------------------
-# 4. HEADER & METRICS
+# 4. HEADER & DASHBOARD METRICS
 # ---------------------------------------------------------
 st.markdown("""
     <div class="pmi-header">
@@ -147,42 +193,80 @@ st.markdown("""
                     🛡️ Papastratos (PMI) - Security Maintenance Hub
                 </h1>
                 <p style="margin:4px 0 0 0; color: #38bdf8; font-size: 1.02rem; font-weight: 600;">
-                    Διαχείριση Βλαβών, Ρόλοι, Ημέρες Αποκατάστασης, Ώρες & Ιστορικό
+                    Κεντρικός Πίνακας KPIs, Κόστη Εργασίας & Υλικών, Ιστορικό & Αποκατάσταση ανά Τμήμα
                 </p>
             </div>
             <div style="text-align: right; background: rgba(15, 23, 42, 0.8); padding: 8px 16px; border-radius: 12px; border: 1px solid #38bdf8;">
-                <span style="color: #10b981; font-weight: 800;">● SYSTEM OPERATIONAL</span>
+                <span style="color: #10b981; font-weight: 800;">● SYSTEM ACTIVE</span>
             </div>
         </div>
     </div>
 """, unsafe_allow_html=True)
 
-k1, k2, k3, k4, k5, k6 = st.columns(6)
-k1.metric("Σύνολο", total_tck)
-k2.metric("🔴 Open", open_tck)
-k3.metric("🟡 Pending", pending_tck)
-k4.metric("🟢 Closed", closed_tck)
-k5.metric("⏱ Σύνολο Ωρών", f"{total_hours:.1f}h")
-k6.metric("💰 Σύνολο Κόστους", f"€{total_labor_cost:,.0f}")
+# KPIs SUMMARY BANNER
+m1, m2, m3, m4, m5, m6 = st.columns(6)
+m1.metric("🔴 Ανοιχτές", open_tck)
+m2.metric("🟢 Κλειστές", closed_tck)
+m3.metric("⏱️ Ώρες Εργασίας", f"{total_hours:.1f}h")
+m4.metric("💰 Κόστος Εργασίας", f"€{total_labor_cost:,.0f}")
+m5.metric("🛠️ Κόστος Υλικών", f"€{total_mat_cost:,.0f}")
+m6.metric("📅 Μ.Ο. Αποκατάστασης", f"{avg_days_to_close:.1f} μέρες")
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Session state για διαχείριση προβολών
+if "view_mode" not in st.session_state:
+    st.session_state.view_mode = "home"
+if "active_ticket_id" not in st.session_state:
+    st.session_state.active_ticket_id = None
+if "last_created_ticket" not in st.session_state:
+    st.session_state.last_created_ticket = None
+
+# ---------------------------------------------------------
+# 5. ΜΕΓΑΛΑ ΚΟΥΜΠΙΑ ΠΛΟΗΓΗΣΗΣ ΣΤΗΝ ΑΡΧΙΚΗ
+# ---------------------------------------------------------
+btn_c1, btn_c2 = st.columns(2)
+with btn_c1:
+    st.markdown('<div class="big-nav-btn">', unsafe_allow_html=True)
+    if st.button("➕ Νέα Καταχώρηση Βλάβης"):
+        st.session_state.view_mode = "new_ticket"
+        st.session_state.active_ticket_id = None
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with btn_c2:
+    st.markdown('<div class="big-nav-btn">', unsafe_allow_html=True)
+    if st.button("📋 Λίστα & Ιστορικό Βλαβών"):
+        st.session_state.view_mode = "list_tickets"
+        st.session_state.active_ticket_id = None
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 5. TABS (ΜΟΝΟ 2 ΤΑΒS: 1. Νέα Βλάβη, 2. Λίστα & Ανάλυση Βλαβών)
+# 6. ΟΘΟΝΗ 1: ΝΕΑ ΚΑΤΑΧΩΡΗΣΗ ΒΛΑΒΗΣ
 # ---------------------------------------------------------
-tab1, tab2 = st.tabs(["📝 1. Καταχώρηση Νέας Βλάβης", "📋 2. Λίστα Βλαβών (Πατήστε σε Βλάβη για Ανάλυση)"])
-
-# TAB 1: NEW TICKET FORM
-with tab1:
-    st.subheader("📝 Νέα Αναφορά Βλάβης / Συντήρησης")
+if st.session_state.view_mode == "new_ticket":
+    st.subheader("📝 Φόρμα Καταχώρησης Νέας Βλάβης")
     
+    # Ειδοποίηση αν μόλις καταχωρήθηκε βλάβη
+    if st.session_state.last_created_ticket:
+        st.markdown(f"""
+        <div class="success-alert-box">
+            <h4>✅ Επιτυχής Καταχώρηση!</h4>
+            <p>Το Ticket <b>{st.session_state.last_created_ticket}</b> αποθηκεύτηκε στη βάση δεδομένων PMI.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        st.session_state.last_created_ticket = None
+
     with st.form("new_ticket_form", clear_on_submit=True):
         f1, f2 = st.columns(2)
         with f1:
             tck_id = st.text_input("Κωδικός Ticket", value=f"TCK-{datetime.now().strftime('%m%d-%H%M')}")
-            creator_tech = st.text_input("👤 Ονοματεπώνυμο Χρήστη", placeholder="π.χ. Ανέστης Θεοδωρίδης")
-            user_role = st.selectbox("🎭 Ρόλος Χρήστη", ["Security Systems Admin", "Technical Expert", "G4S Security Officer", "Shift Supervisor", "External Contractor"])
-            category = st.selectbox("Κατηγορία Συστήματος", ["CCTV (Κάμερες)", "ACS (Access Control / Τουρνικέ)", "Fire Alarm (Πυρανίχνευση)", "Network / PoE / Fiber", "Άλλο"])
+            creator_tech = st.text_input("👤 Ονοματεπώνυμο Χρήστη / Τεχνικού", placeholder="π.χ. Ανέστης Θεοδωρίδης")
+            user_role = st.selectbox("🎭 Ρόλος / Ειδικότητα", ["Security Systems Admin", "Technical Expert", "G4S Security Officer", "Shift Supervisor", "External Contractor"])
+            category = st.selectbox("Τμήμα / Κατηγορία", ["CCTV (Κάμερες)", "ACS (Access Control / Τουρνικέ)", "Fire Alarm (Πυρανίχνευση)", "Network / PoE / Fiber", "Άλλο"])
             building_area = st.text_input("Κτίριο / Περιοχή", placeholder="π.χ. BLD8 - Είσοδος Τουρνικέ DR_116")
 
         with f2:
@@ -190,7 +274,8 @@ with tab1:
             priority = st.selectbox("Προτεραιότητα", ["Low", "Medium", "High", "Critical"])
             status = st.selectbox("Αρχική Κατάσταση", ["Open", "Pending", "Closed"])
             duration_hrs = st.number_input("⏱️ Αρχικές Ώρες Εργασίας (hrs)", min_value=0.0, max_value=100.0, value=1.0, step=0.5)
-            materials = st.text_area("🛠️ Υλικά / Ανταλλακτικά", placeholder="π.χ. 1x PoE Injector, 10m UTP Cat6, 2x RJ45")
+            mat_cost_val = st.number_input("🛠️ Εκτιμώμενο Κόστος Υλικών (€)", min_value=0.0, max_value=10000.0, value=0.0, step=10.0)
+            materials = st.text_area("🛠️ Περιγραφή Υλικών / Ανταλλακτικών", placeholder="π.χ. 1x PoE Injector, 10m UTP Cat6, 2x RJ45")
 
         description = st.text_area("Περιγραφή Προβλήματος & Ενεργειών", placeholder="Αναλυτική περιγραφή της βλάβης...")
 
@@ -201,7 +286,7 @@ with tab1:
         with file_col:
             upload_photo = st.file_uploader("📁 Επιλογή Αρχείου Εικόνας", type=["jpg", "jpeg", "png"])
 
-        if st.form_submit_button("➕ Καταχώρηση Νέας Βλάβης στη Βάση"):
+        if st.form_submit_button("💾 Αποθήκευση Βλάβης στη Βάση"):
             active_photo = cam_photo if cam_photo is not None else upload_photo
             photo_b64 = get_b64_img(active_photo)
             
@@ -224,35 +309,37 @@ with tab1:
             
             try:
                 supabase.table("tickets").insert(insert_payload).execute()
-                st.success(f"✅ Η βλάβη **{tck_id}** καταχωρήθηκε επιτυχώς!")
+                st.session_state.last_created_ticket = tck_id
                 st.rerun()
             except Exception as e:
                 st.error(f"⚠️ Σφάλμα καταχώρησης: {e}")
 
-# TAB 2: CLICKABLE LIST & FULL-WIDTH DETAIL ANALYSIS
-with tab2:
-    if "active_ticket_id" not in st.session_state:
-        st.session_state.active_ticket_id = None
-
-    # ΑΝ ΕΧΕΙ ΕΠΙΛΕΓΕΙ ΒΛΑΒΗ -> ΕΜΦΑΝΙΖΕΤΑΙ Η ΑΝΑΛΥΣΗ ΣΕ ΟΛΗ ΤΗΝ ΟΘΟΝΗ
+# ---------------------------------------------------------
+# 7. ΟΘΟΝΗ 2: ΛΙΣΤΑ ΒΛΑΒΩΝ & ΑΝΑΛΥΤΙΚΗ ΠΡΟΒΟΛΗ (FULL-WIDTH)
+# ---------------------------------------------------------
+elif st.session_state.view_mode == "list_tickets":
+    
+    # ΑΝ ΕΧΕΙ ΕΠΙΛΕΓΕΙ ΣΥΓΚΕΚΡΙΜΕΝΗ ΒΛΑΒΗ -> FULL WIDTH VIEW
     if st.session_state.active_ticket_id and not df_tickets.empty:
         selected_row = df_tickets[df_tickets["ticket_id"] == st.session_state.active_ticket_id]
         
         if not selected_row.empty:
             row = selected_row.iloc[0]
             
-            if st.button("⬅️ Επιστροφή στη Λίστα Όλων των Βλαβών"):
+            if st.button("⬅️️ Επιστροφή στη Λίστα Όλων των Βλαβών"):
                 st.session_state.active_ticket_id = None
                 st.rerun()
 
             st.markdown("<br>", unsafe_allow_html=True)
             badge_color = "#ef4444" if row['status'] == "Open" else ("#f59e0b" if row['status'] == "Pending" else "#10b981")
             
-            # Υπολογισμός Ημερών που παραμένει/παρέμεινε ανοιχτή
-            created_dt = pd.to_datetime(row.get('created_at'), errors='coerce')
-            if pd.notnull(created_dt):
-                now_dt = datetime.now() if row['status'] != 'Closed' else pd.to_datetime(row.get('updated_at', datetime.now()), errors='coerce')
-                open_days = max(0, (now_dt.tz_localize(None) - created_dt.tz_localize(None)).days)
+            # Ασφαλής υπολογισμός ημερών
+            c_dt = pd.to_datetime(row.get('created_at'), errors='coerce')
+            if pd.notnull(c_dt):
+                c_dt = c_dt.tz_localize(None)
+                u_dt = pd.to_datetime(row.get('updated_at', datetime.now()), errors='coerce')
+                u_dt = u_dt.tz_localize(None) if pd.notnull(u_dt) else datetime.now()
+                open_days = max(0, (u_dt - c_dt).days)
             else:
                 open_days = 0
 
@@ -273,7 +360,7 @@ with tab2:
                     <div><b>💰 Κόστος Εργασίας:</b> <br><span style="color:#10b981; font-size:1.1rem; font-weight:800;">€{(float(row.get('resolution_time_hrs', 0.0) or 0.0) * HOURLY_RATE):,.2f}</span></div>
                 </div>
                 <hr style="border-color:#334155; margin:15px 0;">
-                <div><b>🛠️ Υλικά & Ανταλλακτικά που Χρησιμοποιήθηκαν:</b><br><span style="color:#cbd5e1; font-size:1.05rem;">{row.get('materials_used', 'N/A')}</span></div>
+                <div><b>🛠️ Υλικά & Ανταλλακτικά:</b><br><span style="color:#cbd5e1; font-size:1.05rem;">{row.get('materials_used', 'N/A')}</span></div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -288,7 +375,7 @@ with tab2:
 
             # Ιστορικό Ενεργειών (Audit Trail)
             st.markdown("##### 📜 Πλήρες Ιστορικό Ενεργειών & Audit Trail")
-            st.text_area("Audit History Log", value=str(row['description']), height=180, disabled=True)
+            st.text_area("Audit Log History", value=str(row['description']), height=180, disabled=True)
 
             # Φόρμα Ενημέρωσης
             st.markdown("##### 🔄 Φόρμα Ενημέρωσης & Κλεισίματος Βλάβης")
@@ -345,7 +432,7 @@ with tab2:
                     except Exception as e:
                         st.error(f"⚠️ Σφάλμα ενημέρωσης: {e}")
 
-    # ΑΝ ΔΕΝ ΕΧΕΙ ΕΠΙΛΕΓΕΙ ΒΛΑΒΗ -> ΕΜΦΑΝΙΖΕΤΑΙ Η ΛΙΣΤΑ ΟΛΩΝ ΤΩΝ ΒΛΑΒΩΝ
+    # ΑΝ ΔΕΝ ΕΧΕΙ ΕΠΙΛΕΓΕΙ ΒΛΑΒΗ -> ΕΜΦΑΝΙΖΕΤΑΙ Η ΛΙΣΤΑ
     else:
         st.subheader("📋 Λίστα Όλων των Βλαβών (Πατήστε σε μια βλάβη για ανάλυση)")
         
@@ -381,3 +468,18 @@ with tab2:
                     st.rerun()
         else:
             st.info("Δεν υπάρχουν καταχωρημένες βλάβες στη βάση.")
+
+# ---------------------------------------------------------
+# 8. ΟΘΟΝΗ 3 (ΑΡΧΙΚΗ): ΑΝΑΛΥΣΗ ΚΑΤΗΓΟΡΙΩΝ & ΤΜΗΜΑΤΩΝ
+# ---------------------------------------------------------
+if st.session_state.view_mode == "home" and not df_tickets.empty:
+    st.markdown("---")
+    st.subheader("📊 Μέσος Χρόνος Αποκατάστασης & Βλάβες ανά Τμήμα")
+    
+    if "category" in df_tickets.columns:
+        cat_summary = df_tickets.groupby("category").agg(
+            Σύνολο_Βλαβών=("ticket_id", "count"),
+            Σύνολο_Ωρών=("resolution_time_hrs", "sum")
+        ).reset_index()
+        
+        st.dataframe(cat_summary, use_container_width=True, hide_index=True)
