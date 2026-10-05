@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import base64
 from supabase import create_client, Client
 
 # ---------------------------------------------------------
@@ -30,7 +31,6 @@ except Exception:
 # ---------------------------------------------------------
 st.markdown("""
     <style>
-    /* Full Width Container Setup */
     .block-container {
         padding-top: 1.5rem !important;
         padding-bottom: 2rem !important;
@@ -88,16 +88,6 @@ st.markdown("""
         font-size: 1rem !important;
         padding: 12px 20px !important;
     }
-
-    /* Expander / Full-Width Card Styling */
-    .streamlit-expanderHeader {
-        background-color: #1e293b !important;
-        color: #ffffff !important;
-        border-radius: 10px !important;
-        border: 1px solid #334155 !important;
-        font-weight: 700 !important;
-        font-size: 1.05rem !important;
-    }
     
     div[data-testid="stForm"] { 
         background-color: #1e293b; 
@@ -117,6 +107,18 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
+# Helper: Ασφαλής Επεξεργασία Εικόνας σε Base64
+def process_image(img_file):
+    if img_file is not None:
+        try:
+            bytes_data = img_file.getvalue()
+            b64_str = base64.b64encode(bytes_data).decode()
+            mime_type = getattr(img_file, 'type', 'image/jpeg') or 'image/jpeg'
+            return f"data:{mime_type};base64,{b64_str}"
+        except Exception:
+            return None
+    return None
 
 # ---------------------------------------------------------
 # 3. DATA RETRIEVAL & METRICS
@@ -164,7 +166,7 @@ st.markdown("""
                     🛡️ Papastratos (PMI) - Security Systems & Maintenance
                 </h1>
                 <p style="margin:4px 0 0 0; color: #38bdf8; font-size: 1.05rem; font-weight: 600;">
-                    Πλήρης Ανατομία Βλαβών, Υπολογισμός Κόστους, Ωρών & Ιστορικού
+                    Πλήρης Ανατομία Βλαβών, Υπολογισμός Κόστους, Ωρών, Κάμερας & Ιστορικού
                 </p>
             </div>
             <div style="text-align: right; background: rgba(15, 23, 42, 0.8); padding: 8px 16px; border-radius: 12px; border: 1px solid #38bdf8;">
@@ -179,7 +181,7 @@ k1.metric("Σύνολο", total_tck)
 k2.metric("🔴 Open", open_tck)
 k3.metric("🟡 Pending", pending_tck)
 k4.metric("🟢 Closed", closed_tck)
-k5.metric("⏱️️ Σύνολο Ωρών", f"{total_hours:.1f}h")
+k5.metric("⏱ Σύνολο Ωρών", f"{total_hours:.1f}h")
 k6.metric("📅 Μ.Ο. Ημερών", f"{avg_days_to_close:.1f}d")
 
 st.markdown("<br>", unsafe_allow_html=True)
@@ -189,7 +191,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ---------------------------------------------------------
 tab1, tab2, tab3 = st.tabs(["📝 1. Καταχώρηση Νέας Βλάβης", "📋 2. Αναλυτική Προβολή & Ενημέρωση Βλάβης", "📊 3. Αναλυτικά Σύνολα & KPIs"])
 
-# TAB 1: NEW TICKET FORM (Safe Insert)
+# TAB 1: NEW TICKET FORM (With Camera & File Upload)
 with tab1:
     st.subheader("📝 Νέα Αναφορά Βλάβης / Συντήρησης")
     
@@ -198,7 +200,7 @@ with tab1:
         with f1:
             tck_id = st.text_input("Κωδικός Ticket", value=f"TCK-{datetime.now().strftime('%m%d-%H%M')}")
             creator_tech = st.text_input("👤 Τεχνικός / Χειριστής Καταχώρησης", placeholder="π.χ. Ανέστης Θεοδωρίδης")
-            category = st.selectbox("Καρηγορία Συστήματος", ["CCTV (Κάμερες)", "ACS (Access Control / Τουρνικέ)", "Fire Alarm (Πυρανίχνευση)", "Network / PoE / Fiber", "Άλλο"])
+            category = st.selectbox("Κατηγορία Συστήματος", ["CCTV (Κάμερες)", "ACS (Access Control / Τουρνικέ)", "Fire Alarm (Πυρανίχνευση)", "Network / PoE / Fiber", "Άλλο"])
             building_area = st.text_input("Κτίριο / Περιοχή", placeholder="π.χ. BLD8 - Είσοδος Τουρνικέ DR_116")
             device_asset = st.text_input("Συσκευή / Asset ID", placeholder="π.χ. Cam 20 / Reader CR.08L0.01.01")
 
@@ -210,7 +212,17 @@ with tab1:
 
         description = st.text_area("Περιγραφή Προβλήματος & Ενεργειών", placeholder="Αναλυτική περιγραφή της βλάβης...")
 
+        st.markdown("##### 📸 Φωτογραφία Βλάβης (Λήψη από Κάμερα ή Επιλογή Αρχείου)")
+        cam_col, file_col = st.columns(2)
+        with cam_col:
+            cam_photo = st.camera_input("📷 Λήψη από Κάμερα")
+        with file_col:
+            upload_photo = st.file_uploader("📁 Επιλογή Αρχείου Εικόνας", type=["jpg", "jpeg", "png"])
+
         if st.form_submit_button("➕ Καταχώρηση Νέας Βλάβης στη Βάση"):
+            active_photo = cam_photo if cam_photo is not None else upload_photo
+            photo_b64 = process_image(active_photo)
+            
             creator_prefix = f"[Καταχώρηση: {creator_tech}]\n" if creator_tech.strip() else ""
             
             insert_payload = {
@@ -224,6 +236,8 @@ with tab1:
                 "materials_used": materials if materials else "Καμία χρήση υλικών",
                 "resolution_time_hrs": float(duration_hrs)
             }
+            if photo_b64:
+                insert_payload["photo_url"] = photo_b64
             
             try:
                 supabase.table("tickets").insert(insert_payload).execute()
@@ -256,7 +270,7 @@ with tab2:
             
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # --- ΠΛΗΡΕΣ ΠΛΑΤΟΣ (FULL WIDTH BOX) ---
+            # --- FULL WIDTH BOX ---
             badge_color = "#ef4444" if row['status'] == "Open" else ("#f59e0b" if row['status'] == "Pending" else "#10b981")
             
             st.markdown(f"""
@@ -270,7 +284,7 @@ with tab2:
                     <div><b>📍 Περιοχή / Κτίριο:</b> <br><span style="color:#f8fafc; font-size:1.1rem;">{row['building_area']}</span></div>
                     <div><b>🖥️ Συσκευή / Asset:</b> <br><span style="color:#f8fafc; font-size:1.1rem;">{row['device_asset']}</span></div>
                     <div><b>🚨 Προτεραιότητα:</b> <br><span style="color:#f8fafc; font-size:1.1rem;">{row['priority']}</span></div>
-                    <div><b>⏱️ Ώρες Εργασίας:</b> <br><span style="color:#38bdf8; font-size:1.1rem; font-weight:800;">{row.get('resolution_time_hrs', 0.0)} hrs</span></div>
+                    <div><b>⏱️️ Ώρες Εργασίας:</b> <br><span style="color:#38bdf8; font-size:1.1rem; font-weight:800;">{row.get('resolution_time_hrs', 0.0)} hrs</span></div>
                     <div><b>💰 Εκτιμώμενο Κόστος:</b> <br><span style="color:#10b981; font-size:1.1rem; font-weight:800;">€{(float(row.get('resolution_time_hrs', 0.0) or 0.0) * HOURLY_RATE):,.2f}</span></div>
                 </div>
                 <hr style="border-color:#334155; margin:15px 0;">
@@ -278,11 +292,20 @@ with tab2:
             </div>
             """, unsafe_allow_html=True)
             
-            # --- ΙΣΤΟΡΙΚΟ ΕΝΕΡΓΕΙΩΝ ΣΕ ΟΛΟ ΤΟ ΠΛΑΤΟΣ ---
-            st.markdown("##### 📜 Πλήρες Ιστορικό Ενεργειών & Audit Trail (Full Width)")
+            # --- Προβολή Φωτογραφίας αν υπάρχει ---
+            photo_val = row.get('photo_url', None)
+            if photo_val and str(photo_val).strip():
+                st.markdown("##### 📸 Φωτογραφία / Snapshot Βλάβης")
+                try:
+                    st.image(photo_val, use_column_width=True)
+                except Exception:
+                    st.warning("⚠️ Δεν ήταν δυνατή η προεπισκόπηση της εικόνας.")
+
+            # --- ΙΣΤΟΡΙΚΟ ΕΝΕΡΓΕΙΩΝ ---
+            st.markdown("##### 📜 Πλήρες Ιστορικό Ενεργειών & Audit Trail")
             st.text_area("Audit History", value=str(row['description']), height=180, disabled=True)
 
-            # --- ΦΟΡΜΑ ΕΝΗΜΕΡΩΣΗΣ ΣΕ ΟΛΟ ΤΟ ΠΛΑΤΟΣ ---
+            # --- ΦΟΡΜΑ ΕΝΗΜΕΡΩΣΗΣ ---
             st.markdown("##### 🔄 Φόρμα Ενημέρωσης & Κλεισίματος Βλάβης")
             with st.form(key=f"update_form_{row['ticket_id']}"):
                 u1, u2, u3 = st.columns(3)
@@ -296,7 +319,14 @@ with tab2:
                     up_hours = st.number_input("⏱️ Σύνολο Ωρών Εργασίας (hrs)", min_value=0.0, max_value=200.0, value=float(row.get('resolution_time_hrs', 0.0) or 0.0), step=0.5)
 
                 up_mats = st.text_area("🛠️ Υλικά / Ανταλλακτικά", value=str(row.get('materials_used', '') or ''))
-                new_notes = st.text_area("✍️️ Προσθήκη Νέων Ενεργειών / Σημειώσεων", placeholder="Γράψτε τι διορθώθηκε...")
+                new_notes = st.text_area("✍️ Προσθήκη Νέων Ενεργειών / Σημειώσεων", placeholder="Γράψτε τι διορθώθηκε...")
+
+                st.markdown("##### 📸 Προσθήκη / Ενημέρωση Φωτογραφίας (Κάμερα ή Αρχείο)")
+                u_cam_col, u_file_col = st.columns(2)
+                with u_cam_col:
+                    up_cam = st.camera_input("📷 Νέα Λήψη από Κάμερα")
+                with u_file_col:
+                    up_file = st.file_uploader("📁 Νέο Αρχείο Εικόνας", type=["jpg", "jpeg", "png"])
 
                 if st.form_submit_button("💾 Αποθήκευση Ενημέρωσης στη Βάση"):
                     now_str = datetime.now().strftime('%d/%m %H:%M')
@@ -312,8 +342,15 @@ with tab2:
                         "status": up_status,
                         "resolution_time_hrs": float(up_hours),
                         "materials_used": up_mats,
-                        "description": updated_desc
+                        "description": updated_desc,
+                        "updated_at": datetime.now().isoformat()
                     }
+
+                    active_up = up_cam if up_cam is not None else up_file
+                    if active_up is not None:
+                        new_photo_b64 = process_image(active_up)
+                        if new_photo_b64:
+                            payload["photo_url"] = new_photo_b64
 
                     supabase.table("tickets").update(payload).eq("ticket_id", row['ticket_id']).execute()
                     st.success(f"✅ Η βλάβη {row['ticket_id']} ενημερώθηκε επιτυχώς!")
