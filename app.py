@@ -27,7 +27,7 @@ except Exception:
     st.stop()
 
 # ---------------------------------------------------------
-# 2. FULL-WIDTH CLEAN THEME (CSS)
+# 2. FULL-WIDTH THEME (CSS)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
@@ -93,8 +93,8 @@ st.markdown("""
         background-color: #0f172a;
         border: 1px solid #334155;
         border-left: 6px solid #38bdf8;
-        padding: 20px;
-        border-radius: 12px;
+        padding: 22px;
+        border-radius: 14px;
         margin-bottom: 20px;
         width: 100%;
     }
@@ -114,7 +114,7 @@ def get_b64_img(file):
     return None
 
 # ---------------------------------------------------------
-# 3. DATA RETRIEVAL
+# 3. DATA RETRIEVAL & KPIs
 # ---------------------------------------------------------
 try:
     tickets_res = supabase.table("tickets").select("*").order("created_at", desc=True).execute()
@@ -145,7 +145,7 @@ st.markdown("""
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
             <div>
                 <h1 style="margin:0; font-size: 2.1rem; color: #ffffff !important; font-weight: 800;">
-                    🛡️️ Papastratos (PMI) - Security Systems & Maintenance
+                    🛡️ Papastratos (PMI) - Security Systems & Maintenance
                 </h1>
                 <p style="margin:4px 0 0 0; color: #38bdf8; font-size: 1.02rem; font-weight: 600;">
                     Πλήρης Ανατομία Βλαβών, Υπολογισμός Κόστους, Ωρών & Ιστορικού
@@ -171,7 +171,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ---------------------------------------------------------
 # 5. TABS
 # ---------------------------------------------------------
-tab1, tab2, tab3 = st.tabs(["📝 1. Καταχώρηση Νέας Βλάβης", "📋 2. Αναλυτική Προβολή & Ενημέρωση Βλάβης", "📊 3. Αναλυτικά Σύνολα & KPIs"])
+tab1, tab2, tab3 = st.tabs(["📝 1. Καταχώρηση Νέας Βλάβης", "📋 2. Λίστα Βλαβών & Αναλυτική Προβολή", "📊 3. Αναλυτικά Σύνολα & KPIs"])
 
 # TAB 1: NEW TICKET
 with tab1:
@@ -207,7 +207,6 @@ with tab1:
             
             creator_prefix = f"[Καταχώρηση: {creator_tech}]\n" if creator_tech.strip() else ""
             
-            # Μόνο τα 100% ασφαλή πεδία της Supabase
             insert_payload = {
                 "ticket_id": tck_id,
                 "category": category,
@@ -219,43 +218,36 @@ with tab1:
                 "materials_used": materials if materials else "Καμία χρήση υλικών",
                 "resolution_time_hrs": float(duration_hrs)
             }
+            if photo_b64:
+                insert_payload["photo_url"] = photo_b64
             
             try:
                 supabase.table("tickets").insert(insert_payload).execute()
-                if photo_b64:
-                    st.session_state[f"img_{tck_id}"] = photo_b64
                 st.success(f"✅ Η βλάβη **{tck_id}** καταχωρήθηκε επιτυχώς!")
                 st.rerun()
             except Exception as e:
                 st.error(f"⚠️ Σφάλμα καταχώρησης: {e}")
 
-# TAB 2: FULL WIDTH ANALYSIS & UPDATE
+# TAB 2: CLICKABLE LIST & FULL-WIDTH DETAIL VIEW
 with tab2:
-    st.subheader("📋 Αναλυτική Προβολή Βλάβης σε Όλη τη Σελίδα (Full-Width)")
-    
-    if not df_tickets.empty:
-        c_filter, c_select = st.columns([1, 2])
-        with c_filter:
-            status_filter = st.selectbox("Φιλτράρισμα Κατάστασης:", ["Όλες οι Βλάβες", "🔴 Ανοιχτές (Open & Pending)", "🟢 Ολοκληρωμένες (Closed)"])
-        
-        display_df = df_tickets.copy()
-        if status_filter == "🔴 Ανοιχτές (Open & Pending)":
-            display_df = display_df[display_df["status"] != "Closed"]
-        elif status_filter == "🟢 Ολοκληρωμένες (Closed)":
-            display_df = display_df[display_df["status"] == "Closed"]
+    if "active_ticket_id" not in st.session_state:
+        st.session_state.active_ticket_id = None
 
-        if not display_df.empty:
-            ticket_options = [f"{row['ticket_id']} | {row['building_area']} | [{row['status']}]" for _, row in display_df.iterrows()]
-            selected_option = st.selectbox("🎯 Επιλέξτε Βλάβη για Πλήρη Ανάλυση:", options=ticket_options)
+    # ΑΝ ΕΧΕΙ ΕΠΙΛΕΓΕΙ ΒΛΑΒΗ -> ΠΡΟΒΟΛΗ ΑΝΑΛΥΤΙΚΑ ΣΕ ΟΛΗ ΤΗΝ ΟΘΟΝΗ
+    if st.session_state.active_ticket_id and not df_tickets.empty:
+        selected_row = df_tickets[df_tickets["ticket_id"] == st.session_state.active_ticket_id]
+        
+        if not selected_row.empty:
+            row = selected_row.iloc[0]
             
-            selected_id = selected_option.split(" | ")[0]
-            row = display_df[display_df["ticket_id"] == selected_id].iloc[0]
-            
+            if st.button("⬅️ Επιστροφή στη Λίστα Όλων των Βλαβών"):
+                st.session_state.active_ticket_id = None
+                st.rerun()
+
             st.markdown("<br>", unsafe_allow_html=True)
-            
-            # --- FULL WIDTH CARD ---
             badge_color = "#ef4444" if row['status'] == "Open" else ("#f59e0b" if row['status'] == "Pending" else "#10b981")
             
+            # Full-Width Box
             st.markdown(f"""
             <div class="full-card" style="border-left-color: {badge_color};">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
@@ -267,25 +259,28 @@ with tab2:
                     <div><b>📍 Περιοχή / Κτίριο:</b> <br><span style="color:#f8fafc; font-size:1.1rem;">{row['building_area']}</span></div>
                     <div><b>🖥️ Συσκευή / Asset:</b> <br><span style="color:#f8fafc; font-size:1.1rem;">{row['device_asset']}</span></div>
                     <div><b>🚨 Προτεραιότητα:</b> <br><span style="color:#f8fafc; font-size:1.1rem;">{row['priority']}</span></div>
-                    <div><b>⏱️ Ώρες Εργασίας:</b> <br><span style="color:#38bdf8; font-size:1.1rem; font-weight:800;">{row.get('resolution_time_hrs', 0.0)} hrs</span></div>
+                    <div><b>⏱️️ Ώρες Εργασίας:</b> <br><span style="color:#38bdf8; font-size:1.1rem; font-weight:800;">{row.get('resolution_time_hrs', 0.0)} hrs</span></div>
                     <div><b>💰 Κόστος Εργασίας:</b> <br><span style="color:#10b981; font-size:1.1rem; font-weight:800;">€{(float(row.get('resolution_time_hrs', 0.0) or 0.0) * HOURLY_RATE):,.2f}</span></div>
                 </div>
                 <hr style="border-color:#334155; margin:15px 0;">
                 <div><b>🛠️ Υλικά & Ανταλλακτικά που Χρησιμοποιήθηκαν:</b><br><span style="color:#cbd5e1; font-size:1.05rem;">{row.get('materials_used', 'N/A')}</span></div>
             </div>
             """, unsafe_allow_html=True)
-            
-            # --- ΦΩΤΟΓΡΑΦΙΑ ---
-            local_photo = st.session_state.get(f"img_{row['ticket_id']}", None)
-            if local_photo:
-                st.markdown("##### 📸 Φωτογραφία / Snapshot Βλάβης")
-                st.image(local_photo, use_column_width=True)
 
-            # --- ΙΣΤΟΡΙΚΟ ΕΝΕΡΓΕΙΩΝ ---
+            # Φωτογραφία
+            photo_val = row.get('photo_url', None)
+            if photo_val and str(photo_val).strip():
+                st.markdown("##### 📸 Φωτογραφία Βλάβης")
+                try:
+                    st.image(photo_val, use_column_width=True)
+                except Exception:
+                    st.info("Δεν ήταν δυνατή η προεπισκόπηση της φωτογραφίας.")
+
+            # Ιστορικό
             st.markdown("##### 📜 Πλήρες Ιστορικό Ενεργειών & Audit Trail")
             st.text_area("Audit History Log", value=str(row['description']), height=180, disabled=True)
 
-            # --- ΦΟΡΜΑ ΕΝΗΜΕΡΩΣΗΣ ---
+            # Φόρμα Ενημέρωσης
             st.markdown("##### 🔄 Φόρμα Ενημέρωσης & Κλεισίματος Βλάβης")
             with st.form(key=f"update_form_{row['ticket_id']}"):
                 u1, u2, u3 = st.columns(3)
@@ -298,7 +293,7 @@ with tab2:
                 with u3:
                     up_hours = st.number_input("⏱️ Σύνολο Ωρών Εργασίας (hrs)", min_value=0.0, max_value=200.0, value=float(row.get('resolution_time_hrs', 0.0) or 0.0), step=0.5)
 
-                up_mats = st.text_area("🛠️ Υλικά / Ανταλλακτικά", value=str(row.get('materials_used', '') or ''))
+                up_mats = st.text_area("🛠️️ Υλικά / Ανταλλακτικά", value=str(row.get('materials_used', '') or ''))
                 new_notes = st.text_area("✍️ Προσθήκη Νέων Ενεργειών / Σημειώσεων", placeholder="Γράψτε τι διορθώθηκε...")
 
                 st.markdown("##### 📸 Προσθήκη Φωτογραφίας (Κάμερα ή Αρχείο)")
@@ -318,7 +313,6 @@ with tab2:
                     elif tech_name.strip():
                         updated_desc += f"\n[{now_str}{t_prefix}]: Αλλαγή κατάστασης σε {up_status}."
 
-                    # Μόνο τα 100% ασφαλή πεδία της Supabase
                     payload = {
                         "status": up_status,
                         "resolution_time_hrs": float(up_hours),
@@ -330,7 +324,7 @@ with tab2:
                     if active_up is not None:
                         new_b64 = get_b64_img(active_up)
                         if new_b64:
-                            st.session_state[f"img_{row['ticket_id']}"] = new_b64
+                            payload["photo_url"] = new_b64
 
                     try:
                         supabase.table("tickets").update(payload).eq("ticket_id", row['ticket_id']).execute()
@@ -338,10 +332,43 @@ with tab2:
                         st.rerun()
                     except Exception as e:
                         st.error(f"⚠️ Σφάλμα ενημέρωσης: {e}")
-        else:
-            st.info("Δεν βρέθηκαν βλάβες για το επιλεγμένο φίλτρο.")
+
+    # ΑΝ ΔΕΝ ΕΧΕΙ ΕΠΙΛΕΓΕΙ ΒΛΑΒΗ -> ΕΜΦΑΝΙΖΕΤΑΙ Η ΛΙΣΤΑ ΟΛΩΝ ΤΩΝ ΒΛΑΒΩΝ
     else:
-        st.info("Δεν υπάρχουν καταχωρημένες βλάβες στη βάση.")
+        st.subheader("📋 Λίστα Όλων των Βλαβών (Πατήστε σε μια βλάβη για ανάλυση)")
+        
+        if not df_tickets.empty:
+            c_filter, c_search = st.columns([1, 2])
+            with c_filter:
+                status_filter = st.selectbox("Φιλτράρισμα:", ["Όλες οι Βλάβες", "🔴 Ανοιχτές (Open & Pending)", "🟢 Ολοκληρωμένες (Closed)"])
+            with c_search:
+                search_txt = st.text_input("🔍 Αναζήτηση:", placeholder="Αναζήτηση κωδικού, περιοχής, συσκευής...")
+
+            display_df = df_tickets.copy()
+            if status_filter == "🔴 Ανοιχτές (Open & Pending)":
+                display_df = display_df[display_df["status"] != "Closed"]
+            elif status_filter == "🟢 Ολοκληρωμένες (Closed)":
+                display_df = display_df[display_df["status"] == "Closed"]
+
+            if search_txt:
+                display_df = display_df[
+                    display_df["ticket_id"].str.contains(search_txt, case=False, na=False) |
+                    display_df["building_area"].str.contains(search_txt, case=False, na=False) |
+                    display_df["device_asset"].str.contains(search_txt, case=False, na=False)
+                ]
+
+            st.markdown(f"**Βρέθηκαν {len(display_df)} βλάβες:**")
+            st.markdown("---")
+
+            for _, row in display_df.iterrows():
+                badge_icon = "🔴" if row['status'] == "Open" else ("🟡" if row['status'] == "Pending" else "🟢")
+                btn_label = f"{badge_icon} [{row['status']}] {row['ticket_id']} — {row['building_area']} ({row['category']})"
+                
+                if st.button(btn_label, key=f"btn_{row['ticket_id']}"):
+                    st.session_state.active_ticket_id = row['ticket_id']
+                    st.rerun()
+        else:
+            st.info("Δεν υπάρχουν καταχωρημένες βλάβες στη βάση.")
 
 # TAB 3: FULL ANALYTICS
 with tab3:
