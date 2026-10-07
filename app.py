@@ -30,7 +30,7 @@ if not st.session_state.authenticated:
     """, unsafe_allow_html=True)
     
     st.markdown("<h2 style='text-align: center; color: #38bdf8;'>🛡️ Security Maintenance Hub</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #94a3b8;'>Εισάγετε τον κωδικό πρόσβασης για είσοδο στο Demo Site:</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #94a3b8;'>Εισάγετε τον κωδικό πρόσβασης για είσοδος στο Demo Site:</p>", unsafe_allow_html=True)
     
     with st.form("login_form"):
         user_pin = st.text_input("🔑 Κωδικός Πρόσβασης (PIN):", type="password")
@@ -290,16 +290,16 @@ if "active_ticket_id" not in st.session_state: st.session_state.active_ticket_id
 if "success_msg" not in st.session_state: st.session_state.success_msg = None
 
 # ---------------------------------------------------------
-# 5. HEADER (WITH LIVE PULSE & DEMO BADGE)
+# 5. HEADER (PURE HTML TO PREVENT ANCHOR URL GENERATION)
 # ---------------------------------------------------------
 st.markdown("""
     <div class="pmi-header">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
             <div>
                 <span class="demo-badge">🧪 DEMO CONCEPT / PROPOSAL SITE</span>
-                <h1 style="margin:0; font-size: 2.1rem; color: #ffffff !important; font-weight: 800;">
+                <div style="margin:0; font-size: 2.1rem; color: #ffffff !important; font-weight: 800;">
                     🛡️ Security Operations & Maintenance Hub
-                </h1>
+                </div>
                 <p style="margin:4px 0 0 0; color: #38bdf8; font-size: 1.02rem; font-weight: 600;">
                     Πρόταση Συστήματος Διαχείρισης Βλαβών (Ticketing), Ιστορικού & KPIs
                 </p>
@@ -603,28 +603,4 @@ elif st.session_state.view_mode == "list_tickets":
 
             if search_txt:
                 display_df = display_df[
-                    display_df["ticket_id"].str.contains(search_txt, case=False, na=False) |
-                    display_df["building_area"].str.contains(search_txt, case=False, na=False) |
-                    display_df["device_asset"].str.contains(search_txt, case=False, na=False)
-                ]
-
-            st.markdown(f"**Βρέθηκαν {len(display_df)} βλάβες:**")
-            st.markdown("---")
-
-            if not display_df.empty:
-                unique_dates = display_df["Ημερομηνία_Str"].unique()
-                for date_val in unique_dates:
-                    st.markdown(f'<div class="date-header">📅 {date_val}</div>', unsafe_allow_html=True)
-                    date_group = display_df[display_df["Ημερομηνία_Str"] == date_val]
-                    
-                    for _, row in date_group.iterrows():
-                        badge_icon = "🔴" if row['status'] == "Open" else ("🟡" if row['status'] == "Pending" else "🟢")
-                        btn_label = f"{badge_icon} [{row['status']}] {row['ticket_id']} — {row['building_area']} ({row['category']})"
-                        
-                        if st.button(btn_label, key=f"btn_{row['ticket_id']}"):
-                            st.session_state.active_ticket_id = row['ticket_id']
-                            st.rerun()
-            else:
-                st.info("Δεν βρέθηκαν βλάβες με τα επιλεγμένα φίλτρα.")
-        else:
-            st.info("Δεν υπάρχουν καταχωρημένες βλάβες στη βάση.")
+                    display_df["ticket_id"].str
