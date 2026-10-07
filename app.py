@@ -9,14 +9,14 @@ from supabase import create_client, Client
 # 1. PAGE CONFIG & SUPABASE CONNECTION
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="PMI - Security Maintenance Hub (DEMO)",
-    page_icon="🛡️️",
+    page_title="Demo Ticketing Site - Security Hub",
+    page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 # 🔒 ΣΥΣΤΗΜΑ ΑΣΦΑΛΕΙΑΣ / ΚΛΕΙΔΩΜΑ ΜΕ PIN
-APP_PIN = "2020"  # <-- Μπορείς να αλλάξεις τον κωδικό εδώ!
+APP_PIN = "2020"  # <-- Κωδικός πρόσβασης
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -29,8 +29,8 @@ if not st.session_state.authenticated:
         </style>
     """, unsafe_allow_html=True)
     
-    st.markdown("<h2 style='text-align: center; color: #38bdf8;'>🛡️ PMI Security Hub</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #94a3b8;'>Εισάγετε τον κωδικό πρόσβασης για είσοδο στο Demo:</p>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #38bdf8;'>🛡️ Security Maintenance Hub</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #94a3b8;'>Εισάγετε τον κωδικό πρόσβασης για είσοδο στο Demo Site:</p>", unsafe_allow_html=True)
     
     with st.form("login_form"):
         user_pin = st.text_input("🔑 Κωδικός Πρόσβασης (PIN):", type="password")
@@ -42,7 +42,7 @@ if not st.session_state.authenticated:
                 st.rerun()
             else:
                 st.error("❌ Λανθασμένος κωδικός πρόσβασης.")
-    st.stop()  # Διακόπτει την εκτέλεση αν δεν δοθεί ο σωστός κωδικός!
+    st.stop()
 
 @st.cache_resource
 def init_supabase() -> Client:
@@ -296,12 +296,12 @@ st.markdown("""
     <div class="pmi-header">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
             <div>
-                <span class="demo-badge">🧪 DEMO CONCEPT / PROPOSAL MODE</span>
+                <span class="demo-badge">🧪 DEMO CONCEPT / PROPOSAL SITE</span>
                 <h1 style="margin:0; font-size: 2.1rem; color: #ffffff !important; font-weight: 800;">
-                    🛡️ Security Maintenance Hub — Papastratos (PMI)
+                    🛡️ Security Operations & Maintenance Hub
                 </h1>
                 <p style="margin:4px 0 0 0; color: #38bdf8; font-size: 1.02rem; font-weight: 600;">
-                    Πρόταση Συστήματος Διαχείρισης Βλαβών, Ιστορικού & KPIs Συντήρησης
+                    Πρόταση Συστήματος Διαχείρισης Βλαβών (Ticketing), Ιστορικού & KPIs
                 </p>
             </div>
             <div style="text-align: right; background: rgba(15, 23, 42, 0.85); padding: 10px 18px; border-radius: 12px; border: 1px solid #10b981;">
@@ -415,16 +415,16 @@ elif st.session_state.view_mode == "new_ticket":
         with f1:
             tck_id = st.text_input("Κωδικός Ticket", value=f"TCK-{datetime.now().strftime('%m%d-%H%M')}")
             creator_tech = st.text_input("👤 Ονοματεπώνυμο Χρήστη / Τεχνικού", value="Ανέστης Θεοδωρίδης")
-            user_role = st.selectbox("🎭 Ρόλος / Ειδικότητα", ["Security Systems Admin", "Technical Expert", "G4S Security Officer", "Shift Supervisor", "External Contractor"])
+            user_role = st.selectbox("🎭 Ρόλος / Ειδικότητα", ["Security Systems Admin", "Technical Expert", "Security Officer", "Shift Supervisor", "External Contractor"])
             category = st.selectbox("Τμήμα / Κατηγορία", ["CCTV (Κάμερες)", "ACS (Access Control / Τουρνικέ)", "Fire Alarm (Πυρανίχνευση)", "Network / PoE / Fiber", "Άλλο"])
-            building_area = st.text_input("Κτίριο / Περιοχή", placeholder="π.χ. BLD8 - Είσοδος Τουρνικέ DR_116")
+            building_area = st.text_input("Κτίριο / Περιοχή", placeholder="π.χ. BLD8 - Είσοδος Τουρνικέ")
 
         with f2:
-            device_asset = st.text_input("Συσκευή / Asset ID", placeholder="π.χ. Cam 20 / Reader CR.08L0.01.01")
+            device_asset = st.text_input("Συσκευή / Asset ID", placeholder="π.χ. Cam 20 / Reader CR.08")
             priority = st.selectbox("Προτεραιότητα", ["Low", "Medium", "High", "Critical"])
             status = st.selectbox("Αρχική Κατάσταση", ["Open", "Pending", "Closed"])
             duration_hrs = st.number_input("⏱️ Αρχικές Ώρες Εργασίας (hrs)", min_value=0.0, max_value=100.0, value=1.0, step=0.5)
-            materials = st.text_area("🛠️ Περιγραφή Υλικών / Ανταλλακτικών", placeholder="π.χ. 1x PoE Injector, 10m UTP Cat6, 2x RJ45")
+            materials = st.text_area("🛠️ Περιγραφή Υλικών / Ανταλλακτικών", placeholder="π.χ. 1x PoE Injector, 10m UTP Cat6")
 
         description = st.text_area("Περιγραφή Προβλήματος & Ενεργειών", placeholder="Αναλυτική περιγραφή της βλάβης...")
 
@@ -530,7 +530,7 @@ elif st.session_state.view_mode == "list_tickets":
             with u1:
                 tech_name = st.text_input("👤 Ονοματεπώνυμο", value="Ανέστης Θεοδωρίδης")
             with u2:
-                up_role = st.selectbox("🎭 Ρόλος", ["Security Systems Admin", "Technical Expert", "G4S Security Officer", "Shift Supervisor", "External Contractor"])
+                up_role = st.selectbox("🎭 Ρόλος", ["Security Systems Admin", "Technical Expert", "Security Officer", "Shift Supervisor", "External Contractor"])
             with u3:
                 st_options = ["Open", "Pending", "Closed"]
                 curr_st_idx = st_options.index(row['status']) if row['status'] in st_options else 0
@@ -574,7 +574,7 @@ elif st.session_state.view_mode == "list_tickets":
                     st.session_state.view_mode = "home"
                     st.rerun()
                 except Exception as e:
-                    st.error(f"⚠️️ Σφάλμα ενημέρωσης: {e}")
+                    st.error(f"⚠️ Σφάλμα ενημέρωσης: {e}")
 
     # ΑΝ ΔΕΝ ΕΧΕΙ ΕΠΙΛΕΓΕΙ ΒΛΑΒΗ -> ΕΜΦΑΝΙΖΕΤΑΙ Η ΛΙΣΤΑ ΟΜΑΔΟΠΟΙΗΜΕΝΗ ΑΝΑ ΗΜΕΡΟΜΗΝΙΑ
     else:
